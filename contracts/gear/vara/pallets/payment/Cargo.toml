@@ -1,0 +1,73 @@
+[package]
+name = "pallet-gear-payment"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme = "README.md"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+parity-scale-codec = { workspace = true, features = ["derive", "max-encoded-len"] }
+scale-info = { workspace = true, features = ["derive"] }
+primitive-types = { workspace = true, features = ["scale-info"] }
+
+# Internal dependencies
+common.workspace = true
+
+# Substrate deps
+frame-support.workspace = true
+frame-system.workspace = true
+frame-benchmarking = { workspace = true, optional = true }
+sp-std.workspace = true
+sp-runtime.workspace = true
+pallet-authorship.workspace = true
+pallet-balances.workspace = true
+pallet-transaction-payment.workspace = true
+gear-workspace-hack.workspace = true
+
+[dev-dependencies]
+common = { workspace = true, features = ["std"] }
+gear-core.workspace = true
+sp-io = { workspace = true, features = ["std"] }
+frame-support-test = { workspace = true, features = ["std"] }
+pallet-timestamp = { workspace = true, features = ["std"] }
+pallet-gear-bank = { workspace = true, features = ["std"] }
+pallet-gear = { workspace = true, features = ["std"] }
+pallet-gear-gas = { workspace = true, features = ["std"] }
+pallet-gear-messenger = { workspace = true, features = ["std"] }
+pallet-gear-program = { workspace = true, features = ["std"] }
+pallet-gear-scheduler = { workspace = true, features = ["std"] }
+pallet-gear-voucher = { workspace = true, features = ["std"] }
+
+[features]
+default = ['std']
+std = [
+	"parity-scale-codec/std",
+	"frame-benchmarking?/std",
+	"frame-support/std",
+	"frame-support-test/std",
+	"frame-system/std",
+	"scale-info/std",
+	"sp-std/std",
+	"sp-runtime/std",
+	"pallet-balances/std",
+	"pallet-transaction-payment/std",
+	"pallet-authorship/std",
+	"pallet-gear/std",
+	"pallet-gear-gas/std",
+	"pallet-gear-messenger/std",
+	"pallet-gear-program/std",
+	"pallet-gear-scheduler/std",
+	"primitive-types/std",
+]
+runtime-benchmarks = [
+	"frame-benchmarking/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+	"frame-support/runtime-benchmarks",
+]
+try-runtime = ["frame-support/try-runtime"]

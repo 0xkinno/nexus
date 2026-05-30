@@ -1,0 +1,33 @@
+[package]
+name = "gbuiltin-bls381"
+description = "Entities for working with Gear builtin actor providing bls12_381 cryptography"
+documentation = "https://docs.rs/gbuiltin-bls381"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+parity-scale-codec = { workspace = true, features = ["derive"] }
+scale-info = { workspace = true, features = ["derive"] }
+ark-bls12-381 = { workspace = true, features = ["curve"] }
+ark-ec.workspace = true
+ark-ff.workspace = true
+ark-scale = { workspace = true, features = ["hazmat"] }
+ark-serialize = { workspace = true, features = ["derive"] }
+gear-workspace-hack.workspace = true
+
+[features]
+default = ["std"]
+std = [
+    "parity-scale-codec/std",
+    "scale-info/std",
+    "ark-bls12-381/std",
+    "ark-ec/std",
+    "ark-ff/std",
+    "ark-scale/std",
+    "ark-serialize/std",
+]

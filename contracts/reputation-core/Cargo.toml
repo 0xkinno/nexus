@@ -1,0 +1,17 @@
+[package]
+name = "reputation-core-v2"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+gstd = "1.9.2"
+parity-scale-codec = { version = "3", default-features = false, features = ["derive"] }
+scale-info = { version = "2", default-features = false, features = ["derive"] }
+
+[profile.release]
+panic = "abort"
+lto = true
+opt-level = "z"

@@ -1,0 +1,20 @@
+[package]
+name = "galloc"
+description = "Gear Wasm allocator"
+documentation = "https://docs.rs/galloc"
+keywords = ["gear", "allocator", "wasm"]
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# add "checks" feature to enable hard checks in allocator
+dlmalloc.workspace = true
+gear-workspace-hack.workspace = true
+
+[features]
+debug = ["dlmalloc/debug"]

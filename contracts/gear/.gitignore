@@ -1,0 +1,26 @@
+# misc
+.binpath
+log/
+weight-dumps/
+vara/sdk/gsdk/vara_runtime_prod.scale
+*.meta.txt
+
+# cargo
+target/
+target-rust-analyzer/
+target-no-lazy/
+target-xwin/
+
+# ethexe
+.ethexe.toml
+ethexe/contracts/bin/src
+
+# fuzzer
+utils/**/fuzz/corpus/*
+utils/**/fuzz/coverage/*
+utils/**/fuzz/artifacts/*
+utils/**/fuzz/fuzz/*
+fuzz_run
+lazy_pages_fuzz_run
+seed.bin
+

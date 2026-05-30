@@ -1,0 +1,89 @@
+[package]
+name = "gstd"
+description = "Gear programs standard library"
+documentation = "https://docs.rs/gstd"
+keywords = ["gear", "std", "no-std", "wasm", "smart-contracts"]
+categories = ["api-bindings"]
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+arrayvec = { workspace = true, optional = true }
+const_format = { version = "0.2.32", optional = true }
+document-features = { version = "0.2.10", optional = true }
+galloc.workspace = true
+gcore = { workspace = true, features = ["codec"] }
+gstd-codegen.workspace = true
+gear-core-errors.workspace = true
+gprimitives = { workspace = true, features = ["codec"] }
+hashbrown.workspace = true
+hex = { workspace = true, features = ["alloc"] }
+parity-scale-codec = { workspace = true, features = ["derive"] }
+scale-info = { workspace = true, features = ["derive"] }
+futures = { workspace = true, features = ["alloc"] }
+waker-fn = "1.2.0"
+thiserror.workspace = true
+gear-workspace-hack.workspace = true
+
+[features]
+#! ## Default features:
+#! - `panic-message`
+
+default = ["panic-message"]
+
+#! ## Panic handler profiles
+#! We currently use the following format for panic messages from Rust code:
+#! `panicked with '{message}'[ at '{location}']`. Also `Panic occurred: `
+#! will be added to the beginning of the panic message by our core-backend.
+#!
+#! So the final panic message looks like this:
+#! `Panic occurred: panicked with '{message}'[ at '{location}']`.
+#!
+#! You can configure which panic handler profile you need
+#! by specifying one of the following functions:
+
+## When enabled, a minimal panic handler is provided by this crate.
+## Instead of a panic message, `<unknown>` is displayed.
+panic-handler = ["const_format"]
+## When enabled, a panic handler will also display a panic message.
+panic-message = ["panic-handler", "arrayvec"]
+## When enabled, a panic handler will also display a panic message and location.
+## This function is not recommended for use in production environment
+## because it displays the code path.
+panic-location = ["panic-message"]
+
+#! For example, if you don't use the `panic-location` feature, the compiler
+#! will remove all locations such as `/home/username/dapp/src/lib.rs:1:2`
+#! from the binary. The size of program will be reduced and
+#! `/home/username/...` information will not be included in the binary.
+
+#! ## Nightly features
+#!
+#! The final binary gets additional optimizations when using the nightly compiler.
+
+## Enables all features below.
+## These features depend on unstable Rust API and require nightly toolchain.
+nightly = ["oom-handler"]
+## When enabled, an OOM error handler is provided.
+## Relies on [`alloc_error_handler`][rust-51540].
+oom-handler = []
+
+#! ## Additional features
+
+## Disables unsupported syscalls and their calls for executing on ethexe.
+ethexe = ["gcore/ethexe", "gstd-codegen/ethexe"]
+
+## Enables debug logging; this heavily impacts gas cost
+## and is therefore disabled by default.
+debug = ["galloc/debug", "gcore/debug"]
+
+#! [rust-66745]: https://github.com/rust-lang/rust/issues/66745
+#! [rust-51540]: https://github.com/rust-lang/rust/issues/51540
+
+[package.metadata.docs.rs]
+features = ["document-features"]

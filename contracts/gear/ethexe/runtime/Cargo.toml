@@ -1,0 +1,41 @@
+[package]
+name = "ethexe-runtime"
+description = "Wasm runtime for executing Gear programs in ethexe"
+documentation = "https://docs.rs/ethexe-runtime"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+## Gear deps.
+ethexe-runtime-common.workspace = true
+gear-core.workspace = true
+gear-lazy-pages-interface.workspace = true
+gprimitives.workspace = true
+ethexe-common.workspace = true
+
+## Operational deps.
+log.workspace = true
+parity-scale-codec.workspace = true
+gear-workspace-hack.workspace = true
+
+[build-dependencies]
+substrate-wasm-builder = { workspace = true, optional = true }
+
+[features]
+default = ["std"]
+std = [
+    "ethexe-runtime-common/std",
+    "gear-core/std",
+    "gear-lazy-pages-interface/std",
+    "gprimitives/std",
+    #
+    "log/std",
+    "parity-scale-codec/std",
+    #
+    "dep:substrate-wasm-builder",
+]

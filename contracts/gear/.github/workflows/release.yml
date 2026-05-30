@@ -1,0 +1,178 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag for release. Example: v1.0.0"
+        required: true
+      make_latest:
+        description: "Mark this release as the latest"
+        required: true
+        type: choice
+        options:
+          - true
+          - false
+        default: "true"
+      draft:
+        description: "Publish as draft"
+        required: true
+        type: choice
+        options:
+          - true
+          - false
+        default: "false"
+      prerelease:
+        description: "Is this a pre-release"
+        required: true
+        type: choice
+        options:
+          - true
+          - false
+        default: "false"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  TERM: xterm-256color
+  GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+jobs:
+  build:
+    runs-on: [kuberunner]
+    steps:
+      - name: "Actions: Checkout"
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag_name }}
+          submodules: recursive
+
+      - name: "Environment: Rust toolchain"
+        uses: ./.github/actions/install-rust
+
+      - name: "Environment: Build dependencies"
+        run: |
+          sudo apt update -y
+          sudo apt install -y git clang curl libssl-dev llvm libudev-dev cmake protobuf-compiler wget bzip2
+
+      - name: "Environment: Export versions"
+        run: |
+          echo "VARA_PROD_SPEC=$(cat vara/runtime/vara/src/lib.rs | grep "spec_version: " | head -n 1 | awk -F " " '{print substr($2, 1, length($2)-1)}')" >> $GITHUB_ENV
+          echo "VARA_DEV_SPEC=$(cat vara/runtime/vara/src/lib.rs | grep "spec_version: " | tail -n 1 | awk -F " " '{print substr($2, 1, length($2)-1)}')" >> $GITHUB_ENV
+
+      - name: "Environment: Make `artifact` directory"
+        run: mkdir -p artifact
+
+      - name: "Build: `wasm-proc`"
+        run: |
+          cargo build -p wasm-proc --release
+          cp -vf target/release/wasm-proc ./
+
+      - name: "Build: Production `vara-runtime`"
+        run: GENERATE_GSDK_METADATA=1 cargo build -p vara-runtime --profile production --no-default-features --features std,metadata-hash
+
+      - name: "Test: Production `vara-runtime`"
+        run: ./wasm-proc --check-runtime-imports --check-runtime-is-dev false target/production/wbuild/vara-runtime/vara_runtime.compact.wasm
+
+      - name: "Artifact: Production `vara-runtime` metadata"
+        run: |
+          cp ./vara/sdk/gsdk/vara_runtime_prod.scale "artifact/production_vara_runtime_v${VARA_PROD_SPEC}_metadata.scale"
+
+      - name: "Artifact: Production `vara-runtime`"
+        run: cp target/production/wbuild/vara-runtime/vara_runtime.compact.compressed.wasm "artifact/production_vara_runtime_v${VARA_PROD_SPEC}.wasm"
+
+      - name: "Build: Production node client and development `vara-runtime`"
+        run: GENERATE_GSDK_METADATA=1 cargo build -p gear-cli --profile production --features metadata-hash
+
+      - name: "Build: Production `ethexe` node client"
+        run: cargo build -p ethexe-cli --profile production
+
+      - name: "Test: Development `vara-runtime`"
+        run: ./wasm-proc --check-runtime-imports --check-runtime-is-dev true target/production/wbuild/vara-runtime/vara_runtime.compact.wasm
+
+      - name: "Artifact: Development `vara-runtime` metadata"
+        run: |
+          cp ./vara/sdk/gsdk/vara_runtime.scale "artifact/testnet_vara_runtime_v${VARA_DEV_SPEC}_metadata.scale"
+
+      - name: "Artifact: Production node client and development `vara-runtime`"
+        run: |
+          cp target/production/wbuild/vara-runtime/vara_runtime.compact.compressed.wasm "artifact/testnet_vara_runtime_v${VARA_DEV_SPEC}.wasm"
+          cp target/production/gear artifact/gear
+          cp target/production/ethexe artifact/ethexe
+          strip artifact/gear || true
+          strip artifact/ethexe || true
+
+      - name: Check SHA256 checksums
+        run: |
+          sha256sum artifact/production_vara_runtime_v${VARA_PROD_SPEC}.wasm
+          sha256sum artifact/testnet_vara_runtime_v${VARA_DEV_SPEC}.wasm
+
+      - name: Publish
+        uses: softprops/action-gh-release@v3
+        with:
+          files: artifact/*
+          tag_name: ${{ github.event.inputs.tag_name }}
+          make_latest: ${{ github.event.inputs.make_latest }}
+          draft: ${{ github.event.inputs.draft }}
+          prerelease: ${{ github.event.inputs.prerelease }}
+          token: ${{ env.GITHUB_TOKEN }}
+
+  trigger-multiplatform-build:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch Multiplatform Build Workflow
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ env.GITHUB_TOKEN }}
+          script: |
+            github.rest.actions.createWorkflowDispatch({
+              owner: 'gear-tech',
+              repo: 'builds',
+              workflow_id: 'nightly.yml',
+              ref: 'master',
+              inputs: {
+                release_version: '${{ github.event.inputs.tag_name }}',
+                latest: '${{ github.event.inputs.make_latest }}'
+              }
+            });
+
+  trigger-docker-build:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch Docker Build Workflow
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ env.GITHUB_TOKEN }}
+          script: |
+            github.rest.actions.createWorkflowDispatch({
+              owner: 'gear-tech',
+              repo: 'gear',
+              workflow_id: 'CI-docker-gear.yml',
+              ref: 'master',
+              inputs: {
+                release_version: '${{ github.event.inputs.tag_name }}',
+                latest: '${{ github.event.inputs.make_latest }}'
+              }
+            });
+
+  notify:
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify build failure in Telegram
+        if: failure()
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_DEVOPS_CHAT }}
+          token: ${{ secrets.TELEGRAM_DEVOPS_TOKEN }}
+          format: markdown
+          disable_web_page_preview: true
+          message: |
+            *Status:* 🔥
+            *Problem:* Build failed
+            *Details:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}

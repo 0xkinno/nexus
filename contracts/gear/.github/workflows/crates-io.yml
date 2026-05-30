@@ -1,0 +1,41 @@
+name: Crates IO
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "If publish packages"
+        type: boolean
+        default: false
+      version:
+        description: "Workspace version to publish"
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: short
+  RUST_LIB_BACKTRACE: 1
+  TERM: xterm-256color
+
+jobs:
+  check:
+    runs-on: [kuberunner]
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    steps:
+      - name: "ACTIONS: Checkout"
+        uses: actions/checkout@v6
+
+      - name: "Install: Rust stable toolchain"
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+
+      - name: "Publish packages (simulate)"
+        if: ${{ !inputs.publish }}
+        run: cargo +stable run --release -p crates-io publish -v ${{ inputs.version }} --simulate --registry-path /tmp/cargo-http-registry
+
+      - name: "Publish packages"
+        if: ${{ inputs.publish }}
+        run: cargo +stable run --release -p crates-io publish -v ${{ inputs.version }}

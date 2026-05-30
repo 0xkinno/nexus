@@ -1,0 +1,45 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+evm_version = "osaka"
+solc_version = "0.8.34"
+optimizer = true
+# extra_output_files = ["irOptimized"] # Uncomment to enable saving optimized IR
+via_ir = true
+bytecode_hash = "none"
+cbor_metadata = false
+# Required for OpenZeppelin Foundry Upgrades https://github.com/OpenZeppelin/openzeppelin-foundry-upgrades
+ffi = true
+ast = true
+build_info = true
+extra_output = ["storageLayout"]
+# Some warnings should be omitted
+ignored_warnings_from = [
+    # Warning (2424): Natspec memory-safe-assembly... (https://github.com/OpenZeppelin/openzeppelin-foundry-upgrades/issues/115).
+    "lib/openzeppelin-foundry-upgrades/src/internal/Core.sol",
+    "lib/openzeppelin-foundry-upgrades/src/internal/DefenderDeploy.sol",
+    "lib/openzeppelin-foundry-upgrades/src/internal/StringFinder.sol",
+    # Warning (3628): This contract has a payable fallback function, but no receive ether function.
+    "src/Mirror.sol",
+    "src/MirrorProxy.sol",
+]
+# Required for Middleware tests
+fs_permissions = [ { access = "read-write", path = "out" }, { access = "read", path = "lib" } ]
+
+[fmt]
+sort_imports = true
+
+# Temporary disabled lint rules
+[lint]
+exclude_lints = ["asm-keccak256"]
+
+[rpc_endpoints]
+mainnet = "${MAINNET_RPC_URL}"
+hoodi = "${HOODI_RPC_URL}"
+
+[etherscan]
+mainnet = { key = "${ETHERSCAN_API_KEY}" }
+hoodi = { key = "${ETHERSCAN_API_KEY}" }
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

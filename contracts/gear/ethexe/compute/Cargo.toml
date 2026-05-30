@@ -1,0 +1,41 @@
+[package]
+name = "ethexe-compute"
+description = "Code preparation and program execution orchestration for ethexe"
+documentation = "https://docs.rs/ethexe-compute"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ethexe-processor.workspace = true
+ethexe-common.workspace = true
+ethexe-db.workspace = true
+ethexe-runtime-common.workspace = true
+gprimitives = { workspace = true, features = ["std"] }
+thiserror.workspace = true
+futures.workspace = true
+tokio.workspace = true
+derive_more.workspace = true
+log.workspace = true
+gear-workspace-hack.workspace = true
+
+# metrics
+metrics.workspace = true
+metrics-derive.workspace = true
+future-timing.workspace = true
+
+[dev-dependencies]
+gear-core.workspace = true
+gear-utils.workspace = true
+wat.workspace = true
+wasmparser.workspace = true
+ethexe-common = { workspace = true, features = ["mock"] }
+ethexe-db = { workspace = true, features = ["mock"] }
+ntest.workspace = true
+proptest.workspace = true
+# test examples
+demo-ping = { workspace = true, features = ["ethexe"] }

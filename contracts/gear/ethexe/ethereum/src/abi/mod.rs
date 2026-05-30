@@ -1,0 +1,262 @@
+// Copyright (C) Gear Technologies Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
+
+mod events;
+mod gear;
+
+use alloy::sol;
+pub use gear_abi::Gear as GearLib;
+pub use middleware_abi::IMiddleware;
+pub use mirror_abi::IMirror;
+pub use router_abi::{Gear, IRouter};
+
+pub mod gear_abi {
+    alloy::sol!(
+        #[sol(rpc)]
+        #[derive(Debug)]
+        Gear,
+        "abi/Gear.json"
+    );
+}
+
+pub mod middleware_abi {
+    alloy::sol!(
+        #[sol(rpc)]
+        IMiddleware,
+        "abi/Middleware.json"
+    );
+}
+
+// TODO (breathx): remove this dummy hack to avoid reentrancy issues with
+// the `sol!` macro, dealing with internal libraries (e.g. 'Gear').
+mod mirror_abi {
+    alloy::sol!(
+        #[sol(rpc)]
+        IMirror,
+        "abi/Mirror.json"
+    );
+}
+
+mod router_abi {
+    alloy::sol!(
+        #[allow(clippy::too_many_arguments)]
+        #[sol(rpc)]
+        #[derive(Debug)]
+        IRouter,
+        "abi/Router.json"
+    );
+}
+
+sol!(
+    #[sol(rpc)]
+    IERC1967Proxy,
+    "abi/ERC1967Proxy.json"
+);
+
+sol!(
+    #[allow(clippy::too_many_arguments)]
+    #[sol(rpc)]
+    IWrappedVara,
+    "abi/WrappedVara.json"
+);
+
+sol!(
+    #[sol(rpc)]
+    IDemoCaller,
+    "abi/DemoCaller.json"
+);
+
+/// Bindings for Symbiotic contracts.
+/// Only uses for local deployments and tests.
+pub mod symbiotic_abi {
+    // Add additional modules because of duplicating contracts names inside `StakerRewards` and `StakerRewardsFactory`.
+    pub use staker_rewards::DefaultStakerRewards;
+    pub use staker_rewards_factory::DefaultStakerRewardsFactory;
+
+    alloy::sol!(
+        #[sol(rpc)]
+        Vault,
+        "abi/Vault.json"
+    );
+
+    alloy::sol!(
+        #[sol(rpc)]
+        VaultFactory,
+        "abi/VaultFactory.json"
+    );
+
+    alloy::sol!(
+        #[sol(rpc)]
+        OperatorRegistry,
+        "abi/OperatorRegistry.json"
+    );
+
+    alloy::sol!(
+        #[sol(rpc)]
+        NetworkRegistry,
+        "abi/NetworkRegistry.json"
+    );
+
+    alloy::sol!(
+        #[sol(rpc)]
+        NetworkMiddlewareService,
+        "abi/NetworkMiddlewareService.json"
+    );
+
+    alloy::sol!(
+        #[sol(rpc)]
+        OptInService,
+        "abi/OptInService.json"
+    );
+
+    alloy::sol!(
+        #[sol(rpc)]
+        DefaultOperatorRewards,
+        "abi/DefaultOperatorRewards.json"
+    );
+
+    alloy::sol!(
+        #[sol(rpc)]
+        DelegatorFactory,
+        "abi/DelegatorFactory.json"
+    );
+
+    alloy::sol!(
+        #[sol(rpc)]
+        SlasherFactory,
+        "abi/SlasherFactory.json"
+    );
+
+    pub mod staker_rewards_factory {
+        alloy::sol!(
+            #[sol(rpc)]
+            DefaultStakerRewardsFactory,
+            "abi/DefaultStakerRewardsFactory.json"
+        );
+    }
+
+    pub mod staker_rewards {
+        alloy::sol!(
+            #[sol(rpc)]
+            DefaultStakerRewards,
+            "abi/DefaultStakerRewards.json"
+        );
+    }
+}
+
+pub mod utils {
+    use alloy::{
+        primitives::{FixedBytes, Uint},
+        sol,
+    };
+    use gprimitives::{ActorId, CodeId, H256, MessageId, U256};
+    use serde::Serialize;
+
+    pub use alloy::primitives::Bytes;
+
+    pub type Bytes32 = FixedBytes<32>;
+    pub type Uint256 = Uint<256, 4>;
+    pub type Uint48 = Uint<48, 1>;
+
+    sol! {
+        #[allow(missing_docs)]
+        #[derive(Debug, Serialize)]
+        struct Permit {
+            address owner;
+            address spender;
+            uint256 value;
+            uint256 nonce;
+            uint256 deadline;
+        }
+    }
+
+    pub fn actor_id_to_address_lossy(actor_id: ActorId) -> alloy::primitives::Address {
+        actor_id.to_address_lossy().to_fixed_bytes().into()
+    }
+
+    pub fn address_to_actor_id(address: alloy::primitives::Address) -> ActorId {
+        (*address.into_word()).into()
+    }
+
+    pub fn bytes32_to_code_id(bytes: Bytes32) -> CodeId {
+        bytes.0.into()
+    }
+
+    pub fn bytes32_to_h256(bytes: Bytes32) -> H256 {
+        bytes.0.into()
+    }
+
+    pub fn bytes32_to_message_id(bytes: Bytes32) -> MessageId {
+        bytes.0.into()
+    }
+
+    pub fn code_id_to_bytes32(code_id: CodeId) -> Bytes32 {
+        code_id.into_bytes().into()
+    }
+
+    pub fn message_id_to_bytes32(message_id: MessageId) -> Bytes32 {
+        message_id.into_bytes().into()
+    }
+
+    pub fn h256_to_bytes32(h256: H256) -> Bytes32 {
+        h256.0.into()
+    }
+
+    pub fn u64_to_uint48_lossy(value: u64) -> Uint48 {
+        Uint48::try_from(value).unwrap_or(Uint48::MAX)
+    }
+
+    pub fn uint48_to_u64(value: Uint48) -> u64 {
+        let [limb] = value.into_limbs();
+        limb
+    }
+
+    pub fn uint256_to_u128_lossy(value: Uint256) -> u128 {
+        let [low, high, ..] = value.into_limbs();
+
+        ((high as u128) << 64) | (low as u128)
+    }
+
+    pub fn u256_to_uint256(value: U256) -> Uint256 {
+        let mut bytes = [0u8; Uint256::BYTES];
+        value.to_little_endian(&mut bytes);
+        Uint256::from_le_bytes(bytes)
+    }
+
+    pub fn uint256_to_u256(value: Uint256) -> U256 {
+        let bytes: [u8; Uint256::BYTES] = value.to_le_bytes();
+        U256::from_little_endian(&bytes)
+    }
+
+    #[test]
+    fn casts_are_correct() {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        // uint256 -> u128
+        assert_eq!(uint256_to_u128_lossy(Uint256::MAX), u128::MAX);
+
+        for _ in 0..10 {
+            let val: u128 = rng.r#gen();
+            let uint256 = Uint256::from(val);
+
+            assert_eq!(uint256_to_u128_lossy(uint256), val);
+        }
+
+        // u64 -> uint48
+        assert_eq!(u64_to_uint48_lossy(u64::MAX), Uint48::MAX);
+
+        for _ in 0..10 {
+            let val = rng.gen_range(0..=Uint48::MAX.into_limbs()[0]);
+            let uint48 = Uint48::from(val);
+
+            assert_eq!(u64_to_uint48_lossy(val), uint48);
+
+            assert_eq!(
+                ethexe_common::u64_into_uint48_be_bytes_lossy(val),
+                uint48.to_be_bytes()
+            );
+        }
+    }
+}

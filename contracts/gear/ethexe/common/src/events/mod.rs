@@ -1,0 +1,79 @@
+// Copyright (C) Gear Technologies Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
+
+use gprimitives::ActorId;
+use parity_scale_codec::{Decode, Encode};
+use scale_info::TypeInfo;
+
+pub mod mirror;
+pub mod router;
+pub mod wvara;
+
+pub use mirror::{Event as MirrorEvent, RequestEvent as MirrorRequestEvent};
+pub use router::{Event as RouterEvent, RequestEvent as RouterRequestEvent};
+pub use wvara::Event as WVaraEvent;
+
+#[derive(Clone, Debug, PartialEq, Eq, Decode, Encode, TypeInfo, Hash)]
+pub enum BlockEvent {
+    Mirror {
+        actor_id: ActorId,
+        event: MirrorEvent,
+    },
+    Router(RouterEvent),
+}
+
+impl BlockEvent {
+    pub fn mirror(actor_id: ActorId, event: MirrorEvent) -> Self {
+        Self::Mirror { actor_id, event }
+    }
+
+    pub fn to_request(self) -> Option<BlockRequestEvent> {
+        Some(match self {
+            Self::Mirror { actor_id, event } => BlockRequestEvent::Mirror {
+                actor_id,
+                event: event.to_request()?,
+            },
+            Self::Router(event) => BlockRequestEvent::Router(event.to_request()?),
+        })
+    }
+}
+
+impl From<(ActorId, MirrorEvent)> for BlockEvent {
+    fn from((actor_id, event): (ActorId, MirrorEvent)) -> Self {
+        Self::mirror(actor_id, event)
+    }
+}
+
+impl From<RouterEvent> for BlockEvent {
+    fn from(value: RouterEvent) -> Self {
+        Self::Router(value)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Decode, Encode)]
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+pub enum BlockRequestEvent {
+    Router(RouterRequestEvent),
+    Mirror {
+        actor_id: ActorId,
+        event: MirrorRequestEvent,
+    },
+}
+
+impl BlockRequestEvent {
+    pub fn mirror(actor_id: ActorId, event: MirrorRequestEvent) -> Self {
+        Self::Mirror { actor_id, event }
+    }
+}
+
+impl From<(ActorId, MirrorRequestEvent)> for BlockRequestEvent {
+    fn from((actor_id, event): (ActorId, MirrorRequestEvent)) -> Self {
+        Self::mirror(actor_id, event)
+    }
+}
+
+impl From<RouterRequestEvent> for BlockRequestEvent {
+    fn from(value: RouterRequestEvent) -> Self {
+        Self::Router(value)
+    }
+}

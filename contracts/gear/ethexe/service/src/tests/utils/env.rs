@@ -1,0 +1,1592 @@
+// Copyright (C) Gear Technologies Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
+
+use crate::{
+    RouterDataProvider, Service,
+    config::EthereumConfig,
+    tests::utils::{
+        InfiniteStreamExt, TestingEvent, TestingNetworkEvent,
+        events::{self, ObserverEventReceiver, ObserverEventSender, TestingEventReceiver},
+    },
+};
+use alloy::{
+    node_bindings::{Anvil, AnvilInstance},
+    providers::{ProviderBuilder, RootProvider, ext::AnvilApi},
+    rpc::types::anvil::{Metadata, MineOptions},
+};
+use anyhow::Context;
+use ethexe_blob_loader::{BlobLoader, BlobLoaderService, ConsensusLayerConfig};
+use ethexe_common::{
+    Address, CodeAndId, DEFAULT_BLOCK_GAS_LIMIT, SimpleBlockData, ToDigest, ValidatorsVec,
+    consensus::DEFAULT_BATCH_SIZE_LIMIT,
+    db::ConfigStorageRO,
+    ecdsa::{PublicKey, SignedData},
+    events::{
+        BlockEvent, MirrorEvent, RouterEvent,
+        mirror::ReplyEvent,
+        router::{CodeGotValidatedEvent, ProgramCreatedEvent},
+    },
+    network::{SignedValidatorMessage, ValidatorMessage},
+};
+use ethexe_compute::ComputeService;
+use ethexe_consensus::{BatchCommitter, ConsensusService, ValidatorService};
+use ethexe_db::{Database, InitConfig};
+use ethexe_ethereum::{
+    Ethereum, EthereumBuilder,
+    deploy::{ContractsDeploymentParams, EthereumDeployer},
+    middleware::MockElectionProvider,
+    router::RouterQuery,
+};
+use ethexe_malachite::{
+    InjectedTxMempool, MalachiteConfig, MalachiteService, Multiaddr as MalachiteMultiaddr, PeerId,
+    ValidatorEntry, derive_libp2p_secret, malachite_libp2p_peer_id,
+};
+use ethexe_network::{NetworkConfig, NetworkRuntimeConfig, NetworkService, export::Multiaddr};
+use ethexe_observer::{
+    ObserverConfig, ObserverService,
+    utils::{BlockId, BlockLoader, EthereumBlockLoader},
+};
+use ethexe_processor::{DEFAULT_CHUNK_SIZE, Processor};
+use ethexe_rpc::{DEFAULT_BLOCK_GAS_LIMIT_MULTIPLIER, RpcConfig, RpcServer};
+use futures::StreamExt;
+use gear_core_errors::ReplyCode;
+use gprimitives::{ActorId, CodeId, H160, H256, MessageId};
+use gsigner::secp256k1::{Secp256k1SignerExt, Signer};
+use jsonrpsee::{
+    http_client::HttpClient,
+    ws_client::{WsClient, WsClientBuilder},
+};
+use std::{
+    collections::HashMap,
+    fmt, mem,
+    net::{SocketAddr, TcpListener},
+    num::NonZero,
+    pin::Pin,
+    sync::atomic::{AtomicUsize, Ordering},
+    time::Duration,
+};
+use tokio::{
+    sync::oneshot,
+    task::{self, JoinHandle},
+};
+use tracing::Instrument;
+
+/// Max network services which can be created by one test environment.
+const MAX_NETWORK_SERVICES_PER_TEST: usize = 1000;
+
+/// Pre-allocated malachite endpoint: TCP port + deterministic peer-id.
+#[derive(Clone, Debug)]
+pub struct MalachiteEndpoint {
+    pub pub_key: PublicKey,
+    pub listen_addr: SocketAddr,
+    pub peer_id: PeerId,
+}
+
+impl MalachiteEndpoint {
+    pub fn multiaddr(&self) -> MalachiteMultiaddr {
+        format!(
+            "/ip4/{}/tcp/{}/p2p/{}",
+            self.listen_addr.ip(),
+            self.listen_addr.port(),
+            self.peer_id,
+        )
+        .parse()
+        .expect("constructed multiaddr is well-formed")
+    }
+}
+
+pub struct TestEnv {
+    pub eth_cfg: EthereumConfig,
+    #[allow(unused)]
+    pub wallets: Wallets,
+    pub election_provider: MockElectionProvider,
+    pub provider: RootProvider,
+    pub ethereum: Ethereum,
+    pub signer: Signer,
+    pub validators: Vec<ValidatorConfig>,
+    pub sender_id: ActorId,
+    pub threshold: u64,
+    pub continuous_block_generation: bool,
+    pub commitment_delay_limit: std::num::NonZero<u8>,
+    pub canonical_quarantine: u8,
+    pub post_quarantine_delay: u32,
+    pub kicking_per_blocks: Option<u32>,
+    #[allow(unused)]
+    pub db: Database,
+    /// Endpoints aligned 1:1 with `validators`.
+    pub malachite_endpoints: Vec<MalachiteEndpoint>,
+    /// Pre-bound TCP listeners holding each validator's port until handed off in `new_node`.
+    malachite_listeners: HashMap<PublicKey, TcpListener>,
+
+    router_query: RouterQuery,
+    /// In order to reduce amount of observers, we create only one observer and broadcast events to all subscribers.
+    observer_events: (ObserverEventSender, ObserverEventReceiver),
+    /// If network is enabled by test, then we store here:
+    /// network service polling thread, bootstrap address and nonce for new node address generation.
+    bootstrap_network: Option<(JoinHandle<()>, String, usize)>,
+
+    _anvil: Option<AnvilInstance>,
+}
+
+fn build_malachite_endpoints(
+    signer: &Signer,
+    validators: &[ValidatorConfig],
+) -> (Vec<MalachiteEndpoint>, HashMap<PublicKey, TcpListener>) {
+    // Bind concurrently so the OS picks distinct ports; listeners stay alive until handoff.
+    let listeners: Vec<TcpListener> = (0..validators.len())
+        .map(|_| {
+            TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+                .expect("bind 127.0.0.1:0 for malachite endpoint")
+        })
+        .collect();
+
+    let mut listener_map: HashMap<PublicKey, TcpListener> = HashMap::new();
+    let endpoints: Vec<MalachiteEndpoint> = validators
+        .iter()
+        .zip(listeners)
+        .map(|(v, listener)| {
+            let listen_addr = listener.local_addr().expect("local_addr");
+            listener_map.insert(v.public_key, listener);
+            let secret = signer
+                .private_key(v.public_key)
+                .expect("validator key in keyring")
+                .to_bytes();
+            let peer_id = malachite_libp2p_peer_id(&secret);
+            // Pull `derive_libp2p_secret` into scope to pin the engine's derivation invariant.
+            let _ = derive_libp2p_secret;
+            MalachiteEndpoint {
+                pub_key: v.public_key,
+                listen_addr,
+                peer_id,
+            }
+        })
+        .collect();
+
+    (endpoints, listener_map)
+}
+
+impl TestEnv {
+    pub async fn new(config: TestEnvConfig) -> anyhow::Result<Self> {
+        let TestEnvConfig {
+            validators,
+            block_time,
+            rpc,
+            wallets,
+            signer,
+            router_address,
+            continuous_block_generation,
+            network,
+            deploy_params,
+            commitment_delay_limit,
+            canonical_quarantine,
+            post_quarantine_delay,
+            kicking_per_blocks,
+        } = config;
+
+        log::info!(
+            "📗 Starting new test environment. Continuous block generation: {continuous_block_generation}"
+        );
+
+        let (http_rpc_url, ws_rpc_url, anvil) = match rpc {
+            EnvRpcConfig::ProvidedURL {
+                http_rpc_url,
+                ws_rpc_url,
+            } => {
+                log::info!(
+                    "📍 Using provided HTTP RPC URL: {http_rpc_url} and WS RPC URL: {ws_rpc_url}"
+                );
+                (http_rpc_url, ws_rpc_url, None)
+            }
+            EnvRpcConfig::CustomAnvil {
+                slots_in_epoch,
+                genesis_timestamp,
+            } => {
+                let mut anvil = Anvil::new();
+
+                if continuous_block_generation {
+                    anvil = anvil.block_time_f64(block_time.as_secs_f64());
+                }
+                if let Some(slots_in_epoch) = slots_in_epoch {
+                    anvil = anvil.arg(format!("--slots-in-an-epoch={slots_in_epoch}"));
+                }
+                if let Some(genesis_timestamp) = genesis_timestamp {
+                    anvil = anvil.arg(format!("--timestamp={genesis_timestamp}"));
+                }
+
+                let anvil = anvil.spawn();
+
+                let provider: RootProvider = ProviderBuilder::default()
+                    .connect(anvil.ws_endpoint().as_str())
+                    .await
+                    .expect("failed to connect to anvil");
+
+                let Metadata {
+                    client_commit_sha, ..
+                } = provider.anvil_metadata().await?;
+
+                Service::check_foundry_toolchain_version(client_commit_sha)?;
+
+                // By default, anvil set system time as block time. For testing purposes we need to have constant increment.
+                if !continuous_block_generation {
+                    provider
+                        .anvil_set_block_timestamp_interval(block_time.as_secs())
+                        .await
+                        .unwrap();
+                }
+
+                log::info!(
+                    "📍 Anvil started at {} and {}",
+                    anvil.endpoint(),
+                    anvil.ws_endpoint()
+                );
+                (anvil.endpoint(), anvil.ws_endpoint(), Some(anvil))
+            }
+        };
+
+        let mut wallets = if let Some(wallets) = wallets {
+            Wallets::custom(&signer, wallets)
+        } else {
+            Wallets::anvil(&signer)
+        };
+
+        let validators: Vec<_> = match validators {
+            ValidatorsConfig::ProvidedValidators(validators_keys) => validators_keys,
+            ValidatorsConfig::PreDefined(amount) => (0..amount).map(|_| wallets.next()).collect(),
+            ValidatorsConfig::Custom(keys) => keys
+                .iter()
+                .map(|k| {
+                    let private_key = k.parse().unwrap();
+                    signer.import(private_key).unwrap()
+                })
+                .collect(),
+        };
+
+        let validator_configs = Self::define_session_keys(validators.clone());
+        let sender_address = wallets.next().to_address();
+
+        let ethereum = if let Some(router_address) = router_address {
+            log::info!("📗 Connecting to existing router at {router_address}");
+            EthereumBuilder::default()
+                .rpc_url(&ws_rpc_url)
+                .router_address(router_address.parse().unwrap())
+                .signer(signer.clone())
+                .sender_address(sender_address)
+                .with_eip1559_increased_fee()
+                .build()
+                .await?
+        } else {
+            log::info!("📗 Deploying new router");
+            let validators_addresses: Vec<Address> =
+                validators.iter().map(|k| k.to_address()).collect();
+            EthereumDeployer::new(&ws_rpc_url, signer.clone(), sender_address)
+                .await
+                .unwrap()
+                .with_validators(validators_addresses.try_into().unwrap())
+                .with_params(deploy_params)
+                .deploy()
+                .await?
+        };
+
+        let router = ethereum.router();
+        let router_query = router.query();
+        let router_address = router.address();
+
+        let db = ethexe_db::create_initialized_empty_memory_db(InitConfig {
+            ethereum_rpc: ws_rpc_url.clone(),
+            router_address,
+            slot_duration_secs: block_time.as_secs(),
+            genesis_initializer: None,
+        })
+        .await?;
+
+        let eth_cfg = EthereumConfig {
+            rpc: ws_rpc_url.clone(),
+            beacon_rpc: http_rpc_url.clone(),
+            router_address,
+            block_time,
+            eip1559_fee_increase_percentage: Ethereum::NO_EIP1559_FEE_INCREASE_PERCENTAGE,
+            eip1559_max_fee_per_gas_in_gwei: Ethereum::NO_EIP1559_MAX_FEE_PER_GAS_IN_GWEI,
+            blob_gas_multiplier: Ethereum::NO_BLOB_GAS_MULTIPLIER,
+        };
+        let mut observer = ObserverService::new(
+            db.clone(),
+            ObserverConfig {
+                rpc: &ws_rpc_url,
+                max_sync_depth: None,
+            },
+        )
+        .await
+        .unwrap();
+        let latest_block = observer
+            .block_loader()
+            .load_simple(BlockId::Latest)
+            .await
+            .context("failed to get latest block")?;
+        let latest_validators = router_query
+            .validators_at(latest_block.hash)
+            .await
+            .context("failed to get latest validators")?;
+
+        let provider = observer.provider().clone();
+
+        let observer_events = {
+            let (sender, receiver) = events::channel(
+                db.clone(),
+                kicking_per_blocks.map(|blocks| {
+                    let provider = provider.clone();
+                    let duration = block_time * blocks;
+                    (duration, provider)
+                }),
+            );
+
+            let cloned_sender = sender.clone();
+            tokio::spawn(
+                async move {
+                    while let Ok(event) = observer.select_next_some().await {
+                        log::trace!(target: "test-event", "📗 Event: {event:?}");
+                        cloned_sender.send(event).await;
+                    }
+
+                    panic!("📗 Observer stream ended");
+                }
+                .instrument(tracing::error_span!("observer-stream")),
+            );
+
+            (sender, receiver)
+        };
+
+        let threshold = router_query.validators_threshold().await?;
+
+        let network_address = match network {
+            EnvNetworkConfig::Disabled => None,
+            EnvNetworkConfig::Enabled => Some(None),
+            EnvNetworkConfig::EnabledWithCustomAddress(address) => Some(Some(address)),
+        };
+
+        let bootstrap_network = network_address.map(|maybe_address| {
+            static NONCE: AtomicUsize = AtomicUsize::new(1);
+
+            // mul MAX_NETWORK_SERVICES_PER_TEST to avoid address collision between different test-threads
+            let nonce = NONCE.fetch_add(1, Ordering::SeqCst) * MAX_NETWORK_SERVICES_PER_TEST;
+            let address = maybe_address.unwrap_or_else(|| format!("/memory/{nonce}"));
+
+            let network_key = signer.generate().unwrap();
+            let multiaddr: Multiaddr = address.parse().unwrap();
+
+            let mut config = NetworkConfig::new_test(network_key, router_address);
+            config.listen_addresses = [multiaddr.clone()].into();
+            config.external_addresses = [multiaddr.clone()].into();
+
+            let runtime_config = NetworkRuntimeConfig {
+                latest_block_header: latest_block.header,
+                latest_validators,
+                validator_key: None,
+                general_signer: signer.clone(),
+                network_signer: signer.clone(),
+                external_data_provider: Box::new(RouterDataProvider(router_query.clone())),
+                db: db.clone(),
+            };
+
+            let mut service = NetworkService::new(config, runtime_config).unwrap();
+            let mut observer_events = observer_events.1.new_receiver();
+
+            let local_peer_id = service.local_peer_id();
+
+            let handle = task::spawn(
+                async move {
+                    loop {
+                        tokio::select! {
+                            _event = service.select_next_some() => {}
+                            event = observer_events.select_next_some() => {
+                                if let ethexe_observer::ObserverEvent::BlockSynced(block_hash) = event {
+                                    service
+                                        .set_chain_head(block_hash)
+                                        .expect("failed to update bootstrap network chain head");
+                                }
+                            }
+                        }
+                    }
+                }
+                .instrument(tracing::error_span!("network-stream")),
+            );
+
+            let bootstrap_address = format!("{address}/p2p/{local_peer_id}");
+
+            (handle, bootstrap_address, nonce)
+        });
+
+        // Hold listeners alive until `start_service` to keep concurrent test processes off our ports.
+        let (malachite_endpoints, malachite_listeners) =
+            build_malachite_endpoints(&signer, &validator_configs);
+
+        Ok(TestEnv {
+            eth_cfg,
+            wallets,
+            election_provider: MockElectionProvider::new(),
+            provider,
+            ethereum,
+            signer,
+            validators: validator_configs,
+            sender_id: ActorId::from(H160::from(sender_address.0)),
+            threshold,
+            continuous_block_generation,
+            commitment_delay_limit,
+            canonical_quarantine,
+            post_quarantine_delay,
+            kicking_per_blocks,
+            db,
+            malachite_endpoints,
+            malachite_listeners,
+            router_query,
+            observer_events,
+            bootstrap_network,
+            _anvil: anvil,
+        })
+    }
+
+    pub async fn default() -> Self {
+        Self::new(TestEnvConfig::default())
+            .await
+            .expect("failed to create test environment")
+    }
+
+    pub async fn new_node(&mut self, config: NodeConfig) -> Node {
+        let NodeConfig {
+            name,
+            db,
+            validator_config,
+            rpc: service_rpc_config,
+            fast_sync,
+        } = config;
+
+        let db = match db {
+            Some(db) => db,
+            None => self.new_initialized_db().await,
+        };
+
+        let (network_address, network_bootstrap_address) = self
+            .bootstrap_network
+            .as_mut()
+            .map(|(_, bootstrap_address, nonce)| {
+                *nonce += 1;
+
+                if (*nonce).is_multiple_of(MAX_NETWORK_SERVICES_PER_TEST) {
+                    panic!("Too many network services created by one test env: max is {MAX_NETWORK_SERVICES_PER_TEST}");
+                }
+
+                (format!("/memory/{nonce}"), bootstrap_address.clone())
+            })
+            .unzip();
+        let network_public_key = network_address.as_ref().map(|_| {
+            self.signer
+                .generate()
+                .expect("failed to generate network key")
+        });
+
+        // Allocate once: stop+start reuses the same WAL/store.
+        // Both validators and full nodes need a malachite home — full nodes
+        // run the engine in `NodeRole::FullNode` so they receive
+        // `BlockFinalized` and can compute MBs locally.
+        let malachite_home = Some(tempfile::tempdir().expect("malachite home tempdir"));
+
+        // Take this validator's listener; it lives on the Node until first
+        // `start_service`. Full nodes don't have a pre-allocated endpoint
+        // in `self.malachite_endpoints` and bind a fresh port at start.
+        let malachite_listener = validator_config
+            .as_ref()
+            .and_then(|c| self.malachite_listeners.remove(&c.public_key));
+
+        // Snapshot env.validators now so a node spawned post-rotation boots with the new set.
+        let active_validator_pub_keys: Vec<PublicKey> =
+            self.validators.iter().map(|v| v.public_key).collect();
+
+        Node {
+            name,
+            db,
+            multiaddr: None,
+            latest_fast_synced_block: None,
+            custom_committer: None,
+            router_query: self.router_query.clone(),
+            eth_cfg: self.eth_cfg.clone(),
+            receiver: None,
+            election_provider: self.election_provider.clone(),
+            signer: self.signer.clone(),
+            threshold: self.threshold,
+            validator_config,
+            network_public_key,
+            network_address,
+            network_bootstrap_address,
+            service_rpc_config,
+            fast_sync,
+            commitment_delay_limit: self.commitment_delay_limit,
+            malachite_endpoints: self.malachite_endpoints.clone(),
+            active_validator_pub_keys,
+            malachite_home,
+            malachite_listener,
+            running_service_handle: None,
+            shutdown_tx: None,
+            canonical_quarantine: self.canonical_quarantine,
+            post_quarantine_delay: self.post_quarantine_delay,
+            kicking_per_blocks: self
+                .kicking_per_blocks
+                .map(|blocks| (blocks * self.eth_cfg.block_time, self.provider.clone())),
+        }
+    }
+
+    /// Pre-allocate malachite endpoints for an *additional* validator set
+    /// (e.g. the "next" set in an era handover test) and merge them into
+    /// `self.malachite_endpoints` / `self.malachite_listeners`. Without this,
+    /// `start_service` panics when asked to boot a validator whose pubkey
+    /// wasn't part of `TestEnv::new` time.
+    pub fn extend_malachite_endpoints(&mut self, validators: &[ValidatorConfig]) {
+        let (extra_endpoints, extra_listeners) =
+            build_malachite_endpoints(&self.signer, validators);
+        for ep in extra_endpoints {
+            if !self
+                .malachite_endpoints
+                .iter()
+                .any(|e| e.pub_key == ep.pub_key)
+            {
+                self.malachite_endpoints.push(ep);
+            }
+        }
+        self.malachite_listeners.extend(extra_listeners);
+    }
+
+    pub async fn new_initialized_db(&self) -> Database {
+        ethexe_db::create_initialized_empty_memory_db(InitConfig {
+            ethereum_rpc: self.eth_cfg.rpc.clone(),
+            router_address: self.eth_cfg.router_address,
+            slot_duration_secs: self.eth_cfg.block_time.as_secs(),
+            genesis_initializer: None,
+        })
+        .await
+        .unwrap()
+    }
+
+    /// Upload code bytes and request a validation on router. Returns waiter for code validation result.
+    ///
+    /// NOTE: when [`Self::continuous_block_generation`] is off, the returned
+    /// [`WaitForUploadCode`] carries a force-mine kick on its receiver, so
+    /// idle waits will mine an Anvil block — use it carefully.
+    pub async fn upload_code(&self, code: &[u8]) -> anyhow::Result<WaitForUploadCode> {
+        log::info!("📗 Upload code, len {}", code.len());
+
+        let receiver = self.new_observer_events();
+
+        let code_and_id = CodeAndId::new(code.to_vec());
+        let code_id = code_and_id.code_id();
+
+        let (_tx_hash, new_code_id) = self.ethereum.router().request_code_validation(code).await?;
+        assert_eq!(new_code_id, code_id);
+
+        Ok(WaitForUploadCode { code_id, receiver })
+    }
+
+    pub async fn create_program(
+        &self,
+        code_id: CodeId,
+        initial_executable_balance: u128,
+    ) -> anyhow::Result<WaitForProgramCreation> {
+        self.create_program_with_params(code_id, H256::zero(), None, initial_executable_balance)
+            .await
+    }
+
+    pub async fn create_program_with_params(
+        &self,
+        code_id: CodeId,
+        salt: H256,
+        override_initializer: Option<ActorId>,
+        initial_executable_balance: u128,
+    ) -> anyhow::Result<WaitForProgramCreation> {
+        log::info!("📗 Create program, code_id {code_id} with salt {salt:?}");
+
+        let receiver = self.new_observer_events();
+        let router = self.ethereum.router();
+
+        let (_, program_id) = if initial_executable_balance != 0 {
+            router
+                .create_program_with_executable_balance(
+                    code_id,
+                    salt,
+                    override_initializer,
+                    initial_executable_balance,
+                )
+                .await
+        } else {
+            router
+                .create_program(code_id, salt, override_initializer)
+                .await
+        }?;
+
+        Ok(WaitForProgramCreation {
+            receiver,
+            program_id,
+        })
+    }
+
+    #[allow(dead_code)]
+    pub async fn create_program_with_abi_interface(
+        &self,
+        code_id: CodeId,
+        salt: H256,
+        override_initializer: Option<ActorId>,
+        abi_interface: ActorId,
+        initial_executable_balance: u128,
+    ) -> anyhow::Result<WaitForProgramCreation> {
+        log::info!("📗 Create program, code_id {code_id} with salt {salt:?}");
+
+        let receiver = self.new_observer_events();
+        let router = self.ethereum.router();
+
+        let (_, program_id) = if initial_executable_balance != 0 {
+            router
+                .create_program_with_abi_interface_and_executable_balance(
+                    code_id,
+                    salt,
+                    override_initializer,
+                    abi_interface,
+                    initial_executable_balance,
+                )
+                .await?
+        } else {
+            router
+                .create_program_with_abi_interface(
+                    code_id,
+                    salt,
+                    override_initializer,
+                    abi_interface,
+                )
+                .await?
+        };
+
+        Ok(WaitForProgramCreation {
+            receiver,
+            program_id,
+        })
+    }
+
+    pub async fn send_message(
+        &self,
+        program_id: ActorId,
+        payload: &[u8],
+    ) -> anyhow::Result<WaitForReplyTo> {
+        self.send_message_with_params(program_id, payload, 0).await
+    }
+
+    pub async fn send_message_with_params(
+        &self,
+        program_id: ActorId,
+        payload: &[u8],
+        value: u128,
+    ) -> anyhow::Result<WaitForReplyTo> {
+        log::info!(
+            "📗 Send message to {program_id}, payload len {}",
+            payload.len()
+        );
+
+        let receiver = self.new_observer_events();
+        let program = self.ethereum.mirror(program_id);
+
+        let (_, message_id) = program.send_message(payload, value).await?;
+
+        Ok(WaitForReplyTo {
+            receiver,
+            message_id,
+        })
+    }
+
+    #[allow(dead_code)]
+    pub async fn approve_wvara(&self, program_id: ActorId) {
+        log::info!("📗 Approving WVara for {program_id}");
+
+        let wvara = self.ethereum.router().wvara();
+        wvara.approve_all(program_id).await.unwrap();
+    }
+
+    #[allow(dead_code)]
+    pub async fn transfer_wvara(&self, program_id: ActorId, value: u128) {
+        log::info!("📗 Transferring {value} WVara to {program_id}");
+
+        let wvara = self.ethereum.router().wvara();
+        wvara.transfer(program_id, value).await.unwrap();
+    }
+
+    /// Creates a new observer events receiver without previously emitted events
+    pub fn new_observer_events(&self) -> ObserverEventReceiver {
+        self.observer_events.1.new_receiver()
+    }
+
+    /// Force new block generation on rpc node.
+    /// The difference between this method and `skip_blocks` is that
+    /// `skip_blocks` will wait for the block event to be generated,
+    /// while this method does not guarantee that.
+    pub async fn force_new_block(&self) {
+        if self.continuous_block_generation {
+            // nothing to do: new block will be generated automatically
+        } else {
+            self.provider.evm_mine(None).await.unwrap();
+        }
+    }
+
+    /// Force new `blocks_amount` blocks generation on RPC node
+    pub async fn skip_blocks(&self, blocks_amount: u32) {
+        if self.continuous_block_generation {
+            self.new_observer_events()
+                .filter_map_block()
+                .take(blocks_amount as usize)
+                .collect::<Vec<_>>()
+                .await;
+        } else {
+            self.provider
+                .evm_mine(Some(MineOptions::Options {
+                    timestamp: None,
+                    blocks: Some(blocks_amount.into()),
+                }))
+                .await
+                .unwrap();
+        }
+    }
+
+    /// Returns the index in validators list of the next block producer.
+    ///
+    /// ## Note
+    /// This function is not completely thread-safe.
+    /// If you have some other threads or processes,
+    /// that can produce blocks for the same rpc node,
+    /// then the return may be outdated.
+    #[allow(dead_code)]
+    pub async fn next_block_producer_index(&self) -> usize {
+        let timestamp =
+            self.latest_block().await.header.timestamp + self.eth_cfg.block_time.as_secs();
+        self.db
+            .config()
+            .timelines
+            .block_coordinator_index_at(
+                self.validators
+                    .len()
+                    .try_into()
+                    .expect("empty validators unexpected"),
+                timestamp,
+            )
+            .expect("failed to calculate block producer index")
+    }
+
+    /// Waits until the next block producer index becomes equal to `index`.
+    ///
+    /// ## Note
+    /// This function is not completely thread-safe.
+    /// If you have some other threads or processes,
+    /// that can produce blocks for the same rpc node,
+    /// then the return may be outdated.
+    #[allow(dead_code)]
+    pub async fn wait_for_next_producer_index(&self, index: usize) {
+        loop {
+            let next_index = self.next_block_producer_index().await;
+            if next_index == index {
+                break;
+            }
+            self.skip_blocks(1).await;
+        }
+    }
+
+    pub async fn latest_block(&self) -> SimpleBlockData {
+        EthereumBlockLoader::new(self.provider.clone(), self.eth_cfg.router_address)
+            .load_simple(BlockId::Latest)
+            .await
+            .unwrap()
+    }
+
+    pub fn define_session_keys(validators: Vec<PublicKey>) -> Vec<ValidatorConfig> {
+        validators
+            .into_iter()
+            .map(|public_key| ValidatorConfig {
+                public_key,
+                session_public_key: public_key,
+            })
+            .collect()
+    }
+}
+
+pub enum ValidatorsConfig {
+    /// Use provided public keys
+    ProvidedValidators(Vec<PublicKey>),
+    /// Take validator addresses from provided wallet, amount of validators is provided.
+    PreDefined(usize),
+    /// Custom validator eth-addresses in hex string format.
+    #[allow(unused)]
+    Custom(Vec<String>),
+}
+
+/// Configuration for the network service.
+pub enum EnvNetworkConfig {
+    /// Network service is disabled.
+    Disabled,
+    /// Network service is enabled. Network address will be generated.
+    Enabled,
+    #[allow(unused)]
+    /// Network service is enabled. Network address is provided as String.
+    EnabledWithCustomAddress(String),
+}
+
+pub enum EnvRpcConfig {
+    #[allow(unused)]
+    ProvidedURL {
+        http_rpc_url: String,
+        ws_rpc_url: String,
+    },
+    CustomAnvil {
+        slots_in_epoch: Option<u64>,
+        genesis_timestamp: Option<u64>,
+    },
+}
+
+pub struct TestEnvConfig {
+    /// How many validators will be in deployed router.
+    /// By default uses 1 auto generated validator.
+    pub validators: ValidatorsConfig,
+    /// By default uses 1 second block time.
+    pub block_time: Duration,
+    /// By default creates new anvil instance if rpc is not provided.
+    pub rpc: EnvRpcConfig,
+    /// By default uses anvil hardcoded wallets if custom wallets are not provided.
+    pub wallets: Option<Vec<String>>,
+    /// Signer
+    pub signer: Signer,
+    /// If None (by default) new router will be deployed.
+    /// In case of Some(_), will connect to existing router contract.
+    pub router_address: Option<String>,
+    /// Identify whether networks works (or have to works) in continuous block generation mode, false by default.
+    pub continuous_block_generation: bool,
+    /// Network service configuration, disabled by default.
+    pub network: EnvNetworkConfig,
+    /// Smart contracts deploy configuration.
+    pub deploy_params: ContractsDeploymentParams,
+    /// Commitment delay limit in Eth blocks (coordinator-local).
+    pub commitment_delay_limit: std::num::NonZero<u8>,
+    /// Canonical quarantine period in blocks.
+    pub canonical_quarantine: u8,
+    /// Producer-side extra anchor-depth slack on top of `canonical_quarantine`.
+    /// Tests default this to 0 to keep the old timing behavior.
+    pub post_quarantine_delay: u32,
+    /// How often the waiting for events streams should force new blocks mining in order to avoid tests hanging.
+    /// Some contains amount of block intervals between forced blocks mining, None - means that blocks mining will not be forced at all.
+    pub kicking_per_blocks: Option<u32>,
+}
+
+impl Default for TestEnvConfig {
+    fn default() -> Self {
+        Self {
+            validators: ValidatorsConfig::PreDefined(1),
+            block_time: Duration::from_secs(1),
+            rpc: EnvRpcConfig::CustomAnvil {
+                // speeds up block finalization, so we don't have to calculate
+                // when the next finalized block is produced, which is convenient for tests
+                slots_in_epoch: Some(1),
+                // For deterministic tests we need to set fixed genesis timestamp
+                genesis_timestamp: Some(1_000_000_000),
+            },
+            wallets: None,
+            signer: Signer::memory(),
+            router_address: None,
+            continuous_block_generation: false,
+            network: EnvNetworkConfig::Disabled,
+            deploy_params: Default::default(),
+            commitment_delay_limit: ethexe_common::DEFAULT_COMMITMENT_DELAY_LIMIT,
+            canonical_quarantine: 0,
+            post_quarantine_delay: 0,
+            kicking_per_blocks: Some(3),
+        }
+    }
+}
+
+// TODO (breathx): consider to remove me in favor of crate::config::NodeConfig.
+#[derive(Default)]
+pub struct NodeConfig {
+    /// Node name.
+    pub name: Option<String>,
+    /// Database, if not provided, will be created with MemDb.
+    pub db: Option<Database>,
+    /// Validator configuration, if provided then new node starts as validator.
+    pub validator_config: Option<ValidatorConfig>,
+    /// RPC configuration, if provided then new node starts with RPC service.
+    pub rpc: Option<RpcConfig>,
+    /// Do P2P database synchronization before the main loop
+    pub fast_sync: bool,
+}
+
+impl NodeConfig {
+    pub fn named(name: impl Into<String>) -> Self {
+        Self {
+            name: Some(name.into()),
+            ..Default::default()
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn db(mut self, db: Database) -> Self {
+        self.db = Some(db);
+        self
+    }
+
+    pub fn validator(mut self, config: ValidatorConfig) -> Self {
+        self.validator_config = Some(config);
+        self
+    }
+
+    pub fn service_rpc(mut self, rpc_port: u16) -> Self {
+        let service_rpc_config = RpcConfig {
+            listen_addr: SocketAddr::new("127.0.0.1".parse().unwrap(), rpc_port),
+            cors: None,
+            gas_allowance: DEFAULT_BLOCK_GAS_LIMIT_MULTIPLIER * DEFAULT_BLOCK_GAS_LIMIT,
+            chunk_size: DEFAULT_CHUNK_SIZE.get(),
+            with_dev_api: false,
+        };
+        self.rpc = Some(service_rpc_config);
+
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn fast_sync(mut self) -> Self {
+        self.fast_sync = true;
+        self
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ValidatorConfig {
+    /// Validator public key.
+    pub public_key: PublicKey,
+    /// Validator session public key.
+    pub session_public_key: PublicKey,
+}
+
+/// Provides access to hardcoded anvil wallets or custom set wallets.
+pub struct Wallets {
+    wallets: Vec<PublicKey>,
+    next_wallet: usize,
+}
+
+impl Wallets {
+    pub fn anvil(signer: &Signer) -> Self {
+        let accounts = vec![
+            "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+            "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+            "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
+            "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
+            "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
+            "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
+            "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
+            "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
+            "0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
+            "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
+        ];
+
+        Self::custom(signer, accounts)
+    }
+
+    pub fn custom<S: AsRef<str>>(signer: &Signer, accounts: Vec<S>) -> Self {
+        Self {
+            wallets: accounts
+                .into_iter()
+                .map(|s| signer.import(s.as_ref().parse().unwrap()).unwrap())
+                .collect(),
+            next_wallet: 0,
+        }
+    }
+
+    pub fn next(&mut self) -> PublicKey {
+        let pub_key = self.wallets.get(self.next_wallet).expect("No more wallets");
+        self.next_wallet += 1;
+        *pub_key
+    }
+}
+
+pub struct Node {
+    pub name: Option<String>,
+    pub db: Database,
+    pub multiaddr: Option<String>,
+    pub latest_fast_synced_block: Option<H256>,
+    pub custom_committer: Option<Box<dyn BatchCommitter>>,
+
+    router_query: RouterQuery,
+    eth_cfg: EthereumConfig,
+    receiver: Option<TestingEventReceiver>,
+    election_provider: MockElectionProvider,
+    signer: Signer,
+    threshold: u64,
+    validator_config: Option<ValidatorConfig>,
+    network_public_key: Option<PublicKey>,
+    network_address: Option<String>,
+    network_bootstrap_address: Option<String>,
+    service_rpc_config: Option<RpcConfig>,
+    fast_sync: bool,
+    commitment_delay_limit: std::num::NonZero<u8>,
+    canonical_quarantine: u8,
+    post_quarantine_delay: u32,
+    kicking_per_blocks: Option<(Duration, RootProvider)>,
+
+    /// Malachite WAL + store.db tempdir; lives with the node.
+    malachite_home: Option<tempfile::TempDir>,
+
+    /// Endpoints of every validator (this node + peers).
+    malachite_endpoints: Vec<MalachiteEndpoint>,
+    /// Snapshot of `env.validators` at `new_node` time — drives the
+    /// boot-time filter on `malachite_endpoints` in `start_service`.
+    active_validator_pub_keys: Vec<PublicKey>,
+    /// Port reservation; dropped just before the first `MalachiteService::new`.
+    malachite_listener: Option<TcpListener>,
+
+    running_service_handle: Option<JoinHandle<()>>,
+    /// Graceful shutdown — flushes WAL and releases the libp2p listener.
+    shutdown_tx: Option<oneshot::Sender<()>>,
+}
+
+impl Node {
+    pub async fn start_service(&mut self) {
+        assert!(
+            self.running_service_handle.is_none(),
+            "Service is already running"
+        );
+
+        let processor = Processor::new(self.db.clone()).unwrap();
+        let compute = ComputeService::new(self.db.clone(), processor);
+
+        let observer = ObserverService::new(
+            self.db.clone(),
+            ObserverConfig {
+                rpc: &self.eth_cfg.rpc,
+                max_sync_depth: None,
+            },
+        )
+        .await
+        .unwrap();
+        let latest_block = observer
+            .block_loader()
+            .load_simple(BlockId::Latest)
+            .await
+            .unwrap();
+        let latest_validators = observer
+            .router_query()
+            .validators_at(latest_block.hash)
+            .await
+            .unwrap();
+
+        let consensus: Option<Pin<Box<dyn ConsensusService>>> = {
+            if let Some(config) = self.validator_config.as_ref() {
+                let committer = if let Some(custom_committer) = self.custom_committer.take() {
+                    custom_committer
+                } else {
+                    EthereumBuilder::default()
+                        .rpc_url(&self.eth_cfg.rpc)
+                        .router_address(self.eth_cfg.router_address)
+                        .signer(self.signer.clone())
+                        .sender_address(config.public_key.to_address())
+                        .eip1559_fee_increase_percentage(
+                            self.eth_cfg.eip1559_fee_increase_percentage,
+                        )
+                        .blob_gas_multiplier(self.eth_cfg.blob_gas_multiplier)
+                        .build()
+                        .await
+                        .unwrap()
+                        .router()
+                        .into()
+                };
+
+                Some(Box::pin(
+                    ValidatorService::new(
+                        self.signer.clone(),
+                        self.election_provider.clone(),
+                        committer,
+                        self.db.clone(),
+                        ethexe_consensus::ValidatorConfig {
+                            pub_key: config.public_key,
+                            signatures_threshold: self.threshold,
+                            commitment_delay_limit: self.commitment_delay_limit,
+                            router_address: self.eth_cfg.router_address,
+                            batch_size_limit: DEFAULT_BATCH_SIZE_LIMIT,
+                            coordinator_aggregation_delay: std::time::Duration::ZERO,
+                            // High enough that the checkpoint path never fires across the
+                            // short Eth-block budget service tests run for.
+                            uncommitted_chain_len_threshold: std::num::NonZero::new(u32::MAX)
+                                .unwrap(),
+                        },
+                    )
+                    .unwrap(),
+                ) as Pin<Box<dyn ConsensusService>>)
+            } else {
+                None
+            }
+        };
+
+        let validator_pub_key = self.validator_config.as_ref().map(|c| c.public_key);
+        let validator_address = validator_pub_key.map(|key| key.to_address());
+
+        // Validators and full/RPC nodes both join the Malachite mesh.
+        // Full nodes run in `NodeRole::FullNode` (no signing) but still
+        // receive `BlockFinalized` and trigger local compute so promise
+        // bodies reach the RPC subscription manager.
+        let malachite = {
+            // Filter `malachite_endpoints` to era-current pubkeys —
+            // leftover entries from `extend_malachite_endpoints` would
+            // skew the >2/3 threshold.
+            let active: Vec<&MalachiteEndpoint> = self
+                .malachite_endpoints
+                .iter()
+                .filter(|e| self.active_validator_pub_keys.contains(&e.pub_key))
+                .collect();
+
+            let (listen_addr, persistent_peers) = match self.validator_config.as_ref() {
+                Some(config) => {
+                    let me = self
+                        .malachite_endpoints
+                        .iter()
+                        .find(|e| e.pub_key == config.public_key)
+                        .cloned()
+                        .expect(
+                            "validator's malachite endpoint missing — env not aware of this key",
+                        );
+                    assert!(
+                        active.iter().any(|e| e.pub_key == config.public_key),
+                        "test setup bug: local validator {} not in env.validators when start_service was called",
+                        config.public_key,
+                    );
+                    let peers: Vec<MalachiteMultiaddr> = active
+                        .iter()
+                        .filter(|e| e.pub_key != config.public_key)
+                        .map(|e| e.multiaddr())
+                        .collect();
+                    (me.listen_addr, peers)
+                }
+                None => {
+                    // Full node: bind a fresh port, dial every active
+                    // validator. No reserved listener since `new_node`
+                    // never allocated one for this key.
+                    let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+                        .expect("bind 127.0.0.1:0 for full-node malachite endpoint");
+                    let addr = listener.local_addr().expect("local_addr");
+                    let peers: Vec<MalachiteMultiaddr> =
+                        active.iter().map(|e| e.multiaddr()).collect();
+                    drop(listener);
+                    (addr, peers)
+                }
+            };
+
+            let validators: Vec<ValidatorEntry> = active
+                .iter()
+                .map(|e| ValidatorEntry {
+                    public_key: e.pub_key,
+                    voting_power: 1,
+                })
+                .collect();
+
+            // Reuse the home dir from `new_node` so stop+start resumes from WAL.
+            let home_path = self
+                .malachite_home
+                .as_ref()
+                .expect("node must have a malachite home allocated in new_node")
+                .path()
+                .to_path_buf();
+
+            let mut mc = MalachiteConfig::from_home_dir(home_path)
+                .with_listen_addr(listen_addr)
+                .with_persistent_peers(persistent_peers)
+                .with_validators(validators);
+            mc.canonical_quarantine = self.canonical_quarantine;
+            mc.post_quarantine_delay = self.post_quarantine_delay;
+            let mempool = std::sync::Arc::new(InjectedTxMempool::new(self.db.clone()));
+            // Release the port-reservation listener moments before libp2p rebinds.
+            drop(self.malachite_listener.take());
+            let svc = MalachiteService::new(
+                mc,
+                self.db.clone(),
+                self.signer.clone(),
+                self.validator_config.as_ref().map(|c| c.public_key),
+                mempool,
+            )
+            .await
+            .expect("MalachiteService::new");
+            Some(svc)
+        };
+
+        let (sender, receiver) = events::channel(self.db.clone(), self.kicking_per_blocks.clone());
+
+        let consensus_config = ConsensusLayerConfig {
+            ethereum_rpc: self.eth_cfg.rpc.clone(),
+            ethereum_beacon_rpc: self.eth_cfg.beacon_rpc.clone(),
+            beacon_block_time: self.eth_cfg.block_time,
+            attempts: NonZero::<u8>::new(3).unwrap(),
+        };
+        let blob_loader = BlobLoader::new(self.db.clone(), consensus_config)
+            .await
+            .expect("failed to create blob loader")
+            .into_box();
+
+        let wait_for_network = self.network_bootstrap_address.is_some();
+
+        let network = self.construct_network_service(latest_block, latest_validators);
+        if let Some(addr) = self.network_address.as_ref() {
+            let peer_id = network.as_ref().unwrap().local_peer_id();
+            self.multiaddr = Some(format!("{addr}/p2p/{peer_id}"));
+        }
+
+        let rpc = self
+            .service_rpc_config
+            .clone()
+            .map(|config| RpcServer::new(config, self.db.clone()));
+
+        self.receiver = Some(receiver);
+
+        let service = Service::new_from_parts(
+            self.db.clone(),
+            observer,
+            blob_loader,
+            compute,
+            self.signer.clone(),
+            consensus,
+            malachite,
+            network,
+            None,
+            rpc,
+            sender,
+            self.fast_sync,
+            validator_address,
+            validator_pub_key,
+        );
+
+        let mut service = service;
+        let shutdown_tx = service.install_shutdown_channel();
+
+        let name = self.name.clone();
+        let handle = task::spawn(async move {
+            service
+                .run()
+                .instrument(tracing::error_span!("node", name))
+                .await
+                .unwrap_or_else(|err| panic!("Service {name:?} failed: {err}"));
+        });
+        self.running_service_handle = Some(handle);
+        self.shutdown_tx = Some(shutdown_tx);
+
+        if self.fast_sync {
+            self.latest_fast_synced_block = Some(
+                self.events()
+                    .find_map(|event| event.try_unwrap_fast_sync_done().ok())
+                    .await,
+            );
+        }
+
+        self.events()
+            .find(|e| matches!(e, TestingEvent::ServiceStarted))
+            .await;
+
+        // fast sync implies network has connections
+        if wait_for_network && !self.fast_sync {
+            self.events()
+                .find(|e| {
+                    matches!(
+                        e,
+                        TestingEvent::Network(TestingNetworkEvent::PeerConnected(_))
+                    )
+                })
+                .await;
+        }
+    }
+
+    pub async fn stop_service(&mut self) {
+        let handle = self
+            .running_service_handle
+            .take()
+            .expect("Service is not running");
+
+        // Graceful shutdown so the WAL flushes and libp2p releases; abort if the receiver is gone.
+        if let Some(tx) = self.shutdown_tx.take()
+            && tx.send(()).is_ok()
+        {
+            handle
+                .await
+                .unwrap_or_else(|err| panic!("service task failed during shutdown: {err}"));
+        } else {
+            handle.abort();
+            assert!(handle.await.unwrap_err().is_cancelled());
+        }
+
+        self.receiver = None;
+    }
+
+    pub fn rpc_http_client(&self) -> Option<HttpClient> {
+        let listen_addr = self.service_rpc_config.clone()?.listen_addr;
+        let url = format!("http://{}", listen_addr);
+        Some(HttpClient::builder().build(&url).unwrap())
+    }
+
+    #[allow(dead_code)]
+    pub async fn rpc_ws_client(&self) -> Option<WsClient> {
+        let listen_addr = self.service_rpc_config.clone()?.listen_addr;
+        let url = format!("ws://{listen_addr}");
+        Some(WsClientBuilder::new().build(&url).await.unwrap())
+    }
+
+    pub fn events(&mut self) -> TestingEventReceiver {
+        self.receiver.clone().expect("node is not started")
+    }
+
+    #[allow(dead_code)]
+    pub fn new_events(&mut self) -> TestingEventReceiver {
+        self.receiver
+            .as_ref()
+            .map(|r| r.new_receiver())
+            .expect("node is not started")
+    }
+
+    fn construct_network_service(
+        &self,
+        latest_block: SimpleBlockData,
+        latest_validators: ValidatorsVec,
+    ) -> Option<NetworkService> {
+        assert!(
+            self.running_service_handle.is_none(),
+            "Network service is already running"
+        );
+
+        let addr = self.network_address.as_ref()?;
+
+        let network_key = self
+            .network_public_key
+            .expect("network public key must exist when network is configured");
+        let multiaddr: Multiaddr = addr.parse().unwrap();
+
+        let mut config = NetworkConfig::new_test(network_key, self.eth_cfg.router_address);
+        config.listen_addresses = [multiaddr.clone()].into();
+        config.external_addresses = [multiaddr.clone()].into();
+        if let Some(bootstrap_addr) = self.network_bootstrap_address.as_ref() {
+            let multiaddr = bootstrap_addr.parse().unwrap();
+            config.bootstrap_addresses = [multiaddr].into();
+        }
+
+        let runtime_config = NetworkRuntimeConfig {
+            latest_block_header: latest_block.header,
+            latest_validators,
+            validator_key: self.validator_config.as_ref().map(|c| c.public_key),
+            general_signer: self.signer.clone(),
+            network_signer: self.signer.clone(),
+            external_data_provider: Box::new(RouterDataProvider(self.router_query.clone())),
+            db: self.db.clone(),
+        };
+
+        let network = NetworkService::new(config, runtime_config).unwrap();
+
+        Some(network)
+    }
+
+    #[allow(dead_code)]
+    pub async fn publish_validator_message<T: fmt::Debug + ToDigest>(
+        &self,
+        message: impl Into<ValidatorMessage<T>>,
+    ) where
+        SignedValidatorMessage: From<SignedData<ValidatorMessage<T>>>,
+    {
+        let message = message.into();
+        log::info!(
+            "📗 Publishing validator message {message:?} from {:?}",
+            self.name
+        );
+
+        let provider = RootProvider::connect(&self.eth_cfg.rpc).await.unwrap();
+        let block_loader = EthereumBlockLoader::new(provider, self.eth_cfg.router_address);
+        let latest_block = block_loader.load_simple(BlockId::Latest).await.unwrap();
+        let latest_validators = self
+            .router_query
+            .validators_at(latest_block.hash)
+            .await
+            .unwrap();
+
+        let signed = self
+            .signer
+            .signed_data(
+                self.validator_config
+                    .expect("validator config not set")
+                    .public_key,
+                message,
+                None,
+            )
+            .unwrap();
+
+        let mut network = self
+            .construct_network_service(latest_block, latest_validators)
+            .expect("network service is not configured");
+
+        network.publish_message(signed);
+
+        // TODO: #4939 temporary workaround for network message publishing
+        // current approach relies on the network event loop to publish messages.
+        let f = async {
+            loop {
+                let _ = network.select_next_some().await;
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(3), f)
+            .await
+            .expect_err("timeout expected, because loop is infinite");
+    }
+}
+
+impl Drop for Node {
+    fn drop(&mut self) {
+        if let Some(handle) = &self.running_service_handle {
+            log::error!(
+                "Node {} service was not stopped in test before drop - stopping it now roughly",
+                self.name.as_deref().unwrap_or("<unnamed>")
+            );
+            handle.abort();
+        }
+
+        if let Some(receiver) = self.receiver.take() {
+            // avoid `failed to broadcast service event` error
+            // because we cannot `handle.await` in `drop` method
+            mem::forget(receiver);
+        }
+    }
+}
+
+pub struct WaitForUploadCode {
+    pub code_id: CodeId,
+
+    receiver: ObserverEventReceiver,
+}
+
+#[derive(Debug)]
+pub struct UploadCodeInfo {
+    pub code_id: CodeId,
+    pub valid: bool,
+}
+
+impl WaitForUploadCode {
+    pub async fn wait_for(self) -> anyhow::Result<UploadCodeInfo> {
+        log::info!("📗 Waiting for code upload, code_id {}", self.code_id);
+
+        let mut receiver = self.receiver.filter_map_block_synced();
+        let valid = receiver
+            .find_map(|event| match event {
+                BlockEvent::Router(RouterEvent::CodeGotValidated(CodeGotValidatedEvent {
+                    code_id,
+                    valid,
+                })) if code_id == self.code_id => Some(valid),
+                _ => None,
+            })
+            .await;
+
+        Ok(UploadCodeInfo {
+            code_id: self.code_id,
+            valid,
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct WaitForProgramCreation {
+    receiver: ObserverEventReceiver,
+    pub program_id: ActorId,
+}
+
+#[derive(Debug)]
+pub struct ProgramCreationInfo {
+    pub program_id: ActorId,
+    pub code_id: CodeId,
+}
+
+impl WaitForProgramCreation {
+    pub async fn wait_for(self) -> anyhow::Result<ProgramCreationInfo> {
+        log::info!("📗 Waiting for program {} creation", self.program_id);
+
+        let code_id = self
+            .receiver
+            .filter_map_block_synced()
+            .find_map(|event| {
+                match event {
+                    BlockEvent::Router(RouterEvent::ProgramCreated(ProgramCreatedEvent {
+                        actor_id,
+                        code_id,
+                    })) if actor_id == self.program_id => {
+                        return Some(code_id);
+                    }
+
+                    _ => {}
+                }
+                None
+            })
+            .await;
+
+        Ok(ProgramCreationInfo {
+            program_id: self.program_id,
+            code_id,
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct WaitForReplyTo {
+    receiver: ObserverEventReceiver,
+    pub message_id: MessageId,
+}
+
+#[derive(Debug)]
+pub struct ReplyInfo {
+    pub message_id: MessageId,
+    pub program_id: ActorId,
+    pub payload: Vec<u8>,
+    pub code: ReplyCode,
+    pub value: u128,
+}
+
+impl WaitForReplyTo {
+    #[allow(dead_code)]
+    pub fn from_raw_parts(receiver: ObserverEventReceiver, message_id: MessageId) -> Self {
+        Self {
+            receiver,
+            message_id,
+        }
+    }
+
+    pub async fn wait_for(self) -> anyhow::Result<ReplyInfo> {
+        log::info!("📗 Waiting for reply to message {}", self.message_id);
+
+        let info = self
+            .receiver
+            .filter_map_block_synced()
+            .find_map(|event| match event {
+                BlockEvent::Mirror {
+                    actor_id,
+                    event:
+                        MirrorEvent::Reply(ReplyEvent {
+                            reply_to,
+                            payload,
+                            reply_code,
+                            value,
+                        }),
+                } if reply_to == self.message_id => Some(ReplyInfo {
+                    message_id: reply_to,
+                    program_id: actor_id,
+                    payload,
+                    code: reply_code,
+                    value,
+                }),
+                _ => None,
+            })
+            .await;
+
+        Ok(info)
+    }
+}
+
+/// Stop services and drop provided nodes.
+pub async fn stop_nodes(nodes: impl IntoIterator<Item = Node>) {
+    for mut node in nodes.into_iter() {
+        if node.running_service_handle.is_some() {
+            node.stop_service().await;
+        }
+
+        drop(node);
+    }
+}

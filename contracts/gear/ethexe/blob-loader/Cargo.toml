@@ -1,0 +1,37 @@
+[package]
+name = "ethexe-blob-loader"
+description = "Beacon blob loading for the ethexe execution layer"
+documentation = "https://docs.rs/ethexe-blob-loader"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ethexe-common = { workspace = true, features = ["std"] }
+gprimitives = { workspace = true, features = ["std"] }
+
+alloy = { workspace = true, features = [
+    "rpc",
+    "rpc-types",
+    "rpc-types-beacon",
+] }
+thiserror.workspace = true
+reqwest = { workspace = true, features = ["default-tls", "json"] }
+serde_json.workspace = true
+futures.workspace = true
+log.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "fs"] }
+gear-workspace-hack.workspace = true
+
+[dev-dependencies]
+ethexe-db = { workspace = true, features = ["mock"] }
+gprimitives = { workspace = true, features = ["ethexe", "std"] }
+gsigner.workspace = true
+ethexe-ethereum.workspace = true
+
+[lints]
+workspace = true

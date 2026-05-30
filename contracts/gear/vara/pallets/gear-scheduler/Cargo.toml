@@ -1,0 +1,68 @@
+[package]
+name = "pallet-gear-scheduler"
+description = "Gear pallet to work with delayed tasks"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme = "README.md"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+parity-scale-codec = { workspace = true, features = ["derive"] }
+scale-info = { workspace = true, features = ["derive"] }
+log.workspace = true
+
+# Internal deps
+common.workspace = true
+gear-core.workspace = true
+gear-core-errors.workspace = true
+
+# Substrate deps
+frame-support.workspace = true
+frame-system.workspace = true
+frame-benchmarking = { workspace = true, optional = true }
+sp-std.workspace = true
+sp-io.workspace = true
+sp-runtime.workspace = true
+gear-workspace-hack.workspace = true
+
+[dev-dependencies]
+pallet-gear-bank = { workspace = true, features = ["std"] }
+pallet-gear = { workspace = true, features = ["std"] }
+pallet-gear-messenger = { workspace = true, features = ["std"] }
+pallet-gear-program = { workspace = true, features = ["std"] }
+pallet-gear-gas = { workspace = true, features = ["std"] }
+sp-core = { workspace = true, features = ["std"] }
+sp-runtime = { workspace = true, features = ["std"] }
+frame-support-test = { workspace = true, features = ["std"] }
+pallet-balances = { workspace = true, features = ["std"] }
+pallet-authorship = { workspace = true, features = ["std"] }
+pallet-timestamp = { workspace = true, features = ["std"] }
+tracing-subscriber.workspace = true
+common = { workspace = true, features = ["std"] }
+
+[features]
+default = ['std']
+std = [
+	"common/std",
+	"log/std",
+	"frame-benchmarking?/std",
+	"frame-support/std",
+	"frame-system/std",
+	"frame-benchmarking/std",
+	"sp-std/std",
+	"sp-io/std",
+	"sp-runtime/std",
+]
+runtime-benchmarks = [
+	"frame-benchmarking/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+	"frame-support/runtime-benchmarks",
+	"common/runtime-benchmarks"
+]
+try-runtime = ["frame-support/try-runtime"]

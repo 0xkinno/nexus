@@ -1,0 +1,56 @@
+[package]
+name = "ethexe-ethereum"
+description = "Ethereum contract bindings and transaction helpers for ethexe"
+documentation = "https://docs.rs/ethexe-ethereum"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+gsigner = { workspace = true, features = ["std", "secp256k1", "codec", "keyring", "serde"] }
+ethexe-common = { workspace = true, features = ["std"] }
+gear-core.workspace = true
+gear-core-errors.workspace = true
+gprimitives = { workspace = true, features = ["std", "ethexe"] }
+anyhow.workspace = true
+async-trait.workspace = true
+alloy = { workspace = true, features = [
+    "consensus",
+    "contract",
+    "network",
+    "provider-http",
+    "provider-ws",
+    "pubsub",
+    "rpc-types-eth",
+    "rpc-client",
+    "signers",
+    "kzg",
+] }
+futures.workspace = true
+log.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["process"] }
+serde.workspace = true
+nonempty.workspace = true
+rand.workspace = true
+gear-workspace-hack.workspace = true
+
+[dev-dependencies]
+alloy = { workspace = true, features = [
+    "consensus",
+    "contract",
+    "network",
+    "provider-http",
+    "provider-ws",
+    "pubsub",
+    "rpc-types-eth",
+    "rpc-client",
+    "signers",
+    "kzg",
+    "node-bindings",
+] }
+gear-utils.workspace = true

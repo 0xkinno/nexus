@@ -1,0 +1,34 @@
+[package]
+name = "gcore"
+description = "Gear programs core library"
+documentation = "https://docs.rs/gcore"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+gsys.workspace = true
+gprimitives.workspace = true
+gear-core-errors.workspace = true
+gear-stack-buffer.workspace = true
+thiserror.workspace = true
+arrayvec.workspace = true
+paste.workspace = true
+gear-workspace-hack.workspace = true
+
+[dev-dependencies]
+hex-literal.workspace = true
+galloc.workspace = true
+
+[build-dependencies]
+cc = { workspace = true, optional = true }
+
+[features]
+codec = ["gear-core-errors/codec", "gprimitives/codec"]
+debug = []
+compile-shim = ["cc"]
+ethexe = ["gsys/ethexe"]

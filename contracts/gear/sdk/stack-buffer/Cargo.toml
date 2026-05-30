@@ -1,0 +1,21 @@
+[package]
+name = "gear-stack-buffer"
+description = "Gear stack buffer implementation"
+documentation = "https://docs.rs/gear-stack-buffer"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[build-dependencies]
+cc = { workspace = true, optional = true }
+
+[features]
+compile-alloca = ["cc"]
+stack-clash-protection = []
+
+[dependencies]
+gear-workspace-hack.workspace = true

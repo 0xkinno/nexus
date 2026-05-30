@@ -1,0 +1,144 @@
+// Copyright (C) Gear Technologies Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
+
+use crate::wasm::interface::promise_ri;
+
+use super::interface::database_ri;
+use alloc::vec::Vec;
+use ethexe_common::{HashOf, injected::Promise};
+use ethexe_runtime_common::{
+    RuntimeInterface,
+    state::{
+        Allocations, DispatchStash, Mailbox, MemoryPages, MemoryPagesRegion, MessageQueue,
+        ProgramState, Storage, UserMailbox, Waitlist,
+    },
+};
+use gear_core::{buffer::Payload, memory::PageBuf};
+use gear_lazy_pages_interface::{LazyPagesInterface, LazyPagesRuntimeInterface};
+use gprimitives::H256;
+
+#[derive(Debug, Clone)]
+pub struct NativeRuntimeInterface;
+
+impl Storage for NativeRuntimeInterface {
+    fn program_state(&self, hash: H256) -> Option<ProgramState> {
+        if hash.is_zero() {
+            Some(ProgramState::zero())
+        } else {
+            database_ri::read_unwrapping(&hash)
+        }
+    }
+
+    fn write_program_state(&self, state: ProgramState) -> H256 {
+        if state.is_zero() {
+            return H256::zero();
+        }
+
+        database_ri::write(state)
+    }
+
+    fn message_queue(&self, hash: HashOf<MessageQueue>) -> Option<MessageQueue> {
+        database_ri::read_unwrapping(&hash.inner())
+    }
+
+    fn write_message_queue(&self, queue: MessageQueue) -> HashOf<MessageQueue> {
+        unsafe { HashOf::new(database_ri::write(queue)) }
+    }
+
+    fn waitlist(&self, hash: HashOf<Waitlist>) -> Option<Waitlist> {
+        database_ri::read_unwrapping(&hash.inner())
+    }
+
+    fn write_waitlist(&self, waitlist: Waitlist) -> HashOf<Waitlist> {
+        unsafe { HashOf::new(database_ri::write(waitlist)) }
+    }
+
+    fn dispatch_stash(&self, hash: HashOf<DispatchStash>) -> Option<DispatchStash> {
+        database_ri::read_unwrapping(&hash.inner())
+    }
+
+    fn write_dispatch_stash(&self, stash: DispatchStash) -> HashOf<DispatchStash> {
+        unsafe { HashOf::new(database_ri::write(stash)) }
+    }
+
+    fn mailbox(&self, hash: HashOf<Mailbox>) -> Option<Mailbox> {
+        database_ri::read_unwrapping(&hash.inner())
+    }
+
+    fn write_mailbox(&self, mailbox: Mailbox) -> HashOf<Mailbox> {
+        unsafe { HashOf::new(database_ri::write(mailbox)) }
+    }
+
+    fn user_mailbox(&self, hash: HashOf<UserMailbox>) -> Option<UserMailbox> {
+        database_ri::read_unwrapping(&hash.inner())
+    }
+
+    fn write_user_mailbox(&self, user_mailbox: UserMailbox) -> HashOf<UserMailbox> {
+        unsafe { HashOf::new(database_ri::write(user_mailbox)) }
+    }
+
+    fn memory_pages(&self, hash: HashOf<MemoryPages>) -> Option<MemoryPages> {
+        database_ri::read_unwrapping(&hash.inner())
+    }
+
+    fn memory_pages_region(&self, hash: HashOf<MemoryPagesRegion>) -> Option<MemoryPagesRegion> {
+        database_ri::read_unwrapping(&hash.inner())
+    }
+
+    fn write_memory_pages(&self, pages: MemoryPages) -> HashOf<MemoryPages> {
+        unsafe { HashOf::new(database_ri::write(pages)) }
+    }
+
+    fn write_memory_pages_region(
+        &self,
+        pages_region: MemoryPagesRegion,
+    ) -> HashOf<MemoryPagesRegion> {
+        unsafe { HashOf::new(database_ri::write(pages_region)) }
+    }
+
+    fn allocations(&self, hash: HashOf<Allocations>) -> Option<Allocations> {
+        database_ri::read_unwrapping(&hash.inner())
+    }
+
+    fn write_allocations(&self, allocations: Allocations) -> HashOf<Allocations> {
+        unsafe { HashOf::new(database_ri::write(allocations)) }
+    }
+
+    fn payload(&self, hash: HashOf<Payload>) -> Option<Payload> {
+        // TODO: review this.
+        database_ri::read_raw(&hash.inner()).map(|slice| slice.to_vec().try_into().unwrap())
+    }
+
+    fn write_payload(&self, payload: Payload) -> HashOf<Payload> {
+        unsafe { HashOf::new(database_ri::write(payload)) }
+    }
+
+    fn page_data(&self, hash: HashOf<PageBuf>) -> Option<PageBuf> {
+        database_ri::read_unwrapping(&hash.inner())
+    }
+
+    fn write_page_data(&self, data: PageBuf) -> HashOf<PageBuf> {
+        unsafe { HashOf::new(database_ri::write(data)) }
+    }
+}
+
+impl RuntimeInterface for NativeRuntimeInterface {
+    type LazyPages = LazyPagesRuntimeInterface;
+
+    fn init_lazy_pages(&self) {
+        assert!(Self::LazyPages::try_to_enable_lazy_pages(Default::default()))
+    }
+
+    fn random_data(&self) -> (Vec<u8>, u32) {
+        // TODO: set real value
+        Default::default()
+    }
+
+    fn update_state_hash(&self, hash: &H256) {
+        database_ri::update_state_hash(hash);
+    }
+
+    fn publish_promise(&self, promise: &Promise) {
+        promise_ri::publish_promise(promise);
+    }
+}

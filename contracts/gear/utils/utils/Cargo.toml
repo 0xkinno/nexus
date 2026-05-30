@@ -1,0 +1,22 @@
+[package]
+name = "gear-utils"
+description = "Utils of gear network"
+documentation = "https://docs.rs/gear-utils"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+nonempty.workspace = true
+tracing-subscriber.workspace = true
+hex.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+path-clean.workspace = true
+gear-core.workspace = true
+parity-scale-codec.workspace = true
+gear-workspace-hack.workspace = true

@@ -1,0 +1,33 @@
+[package]
+name = "gear-wasm-instrument"
+description = "Wasm instrument library for Gear programs"
+documentation = "https://docs.rs/gear-wasm-instrument"
+keywords = ["gear", "wasm"]
+categories = ["wasm"]
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+derive_more.workspace = true
+enum-iterator.workspace = true
+wasmparser.workspace = true
+wasm-encoder.workspace = true
+log.workspace = true
+gear-workspace-hack.workspace = true
+
+[dev-dependencies]
+wat.workspace = true
+wasmprinter.workspace = true
+wasm-smith.workspace = true
+arbitrary.workspace = true
+proptest.workspace = true
+diff = "0.1.13"
+
+[features]
+default = ["std"]
+std = ["wasmparser/std", "wasm-encoder/std"]

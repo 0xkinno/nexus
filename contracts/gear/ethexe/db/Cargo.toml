@@ -1,0 +1,60 @@
+[package]
+name = "ethexe-db"
+description = "Database abstractions and implementations for ethexe"
+documentation = "https://docs.rs/ethexe-db"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ethexe-common = { workspace = true, features = ["std"] }
+ethexe-ethereum.workspace = true
+ethexe-runtime-common = { workspace = true, features = ["std"] }
+gear-core = { workspace = true, features = ["std"] }
+gprimitives = { workspace = true, features = ["std"] }
+gsigner.workspace = true
+
+alloy.workspace = true
+anyhow.workspace = true
+flate2.workspace = true
+hex.workspace = true
+dashmap.workspace = true
+log.workspace = true
+parity-scale-codec.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+paste.workspace = true
+derive_more.workspace = true
+scale-info = { workspace = true, features = ["derive"] }
+auto_impl.workspace = true
+gear-workspace-hack.workspace = true
+delegate.workspace = true
+futures.workspace = true
+
+# TODO: remove when https://github.com/tikv/jemallocator/pull/99 merged
+[target.'cfg(target_env = "msvc")'.dependencies.rocksdb]
+default-features = false
+features = ["snappy"]
+version = "0.21"
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies.rocksdb]
+default-features = false
+features = ["snappy", "jemalloc"]
+version = "0.21"
+
+[dev-dependencies]
+scopeguard.workspace = true
+tempfile.workspace = true
+ethexe-common = { workspace = true, features = ["mock"] }
+indoc.workspace = true
+scale-info = { workspace = true, features = ["docs"] }
+sha3.workspace = true
+
+[features]
+default = ["mock"]
+mock = ["ethexe-common/mock"]

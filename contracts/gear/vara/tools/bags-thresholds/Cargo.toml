@@ -1,0 +1,15 @@
+[package]
+name = "gear-bags-thresholds"
+version = "1.0.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+vara-runtime.workspace = true
+vara-runtime.features = ["std"]
+generate-bags.workspace = true
+
+# third-party
+clap = { workspace = true, features = ["derive"] }
+gear-workspace-hack.workspace = true

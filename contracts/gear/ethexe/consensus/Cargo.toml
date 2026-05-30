@@ -1,0 +1,37 @@
+[package]
+name = "ethexe-consensus"
+description = "Validator consensus services for the ethexe execution layer"
+documentation = "https://docs.rs/ethexe-consensus"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ethexe-db.workspace = true
+gsigner = { workspace = true, features = ["std", "secp256k1", "codec", "keyring", "serde"] }
+ethexe-ethereum.workspace = true
+ethexe-common.workspace = true
+gprimitives = { workspace = true, features = ["codec", "std", "ethexe"] }
+
+async-trait.workspace = true
+tokio.workspace = true
+parity-scale-codec = { workspace = true, features = ["std", "derive"] }
+tracing.workspace = true
+anyhow = { workspace = true, features = ["std"] }
+futures.workspace = true
+derive_more.workspace = true
+hashbrown.workspace = true
+metrics.workspace = true
+metrics-derive.workspace = true
+gear-workspace-hack.workspace = true
+alloy.workspace = true
+
+[dev-dependencies]
+ethexe-common = { workspace = true, features = ["mock"] }
+ethexe-db = { workspace = true, features = ["mock"] }
+tokio.workspace = true
+gear-core.workspace = true

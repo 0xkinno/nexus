@@ -1,0 +1,24 @@
+name: install-cargo-xwin
+
+runs:
+  using: composite
+  steps:
+    - name: "Install: cargo-binstall"
+      uses: cargo-bins/cargo-binstall@main
+
+    - name: "Install: cargo-xwin"
+      run: cargo +stable binstall --no-confirm cargo-xwin@0.21.2
+      shell: bash
+
+    - run: |
+        echo "XWIN_ARCH=x86_64" >> $GITHUB_ENV
+        cargo xwin --version >> ${{ runner.temp }}/cargo-xwin-version.txt
+      shell: bash
+
+    - name: "Cache MSVC CRT"
+      uses: actions/cache@v4
+      with:
+        path: /home/runner/.cache/cargo-xwin/xwin
+        key: xwin-msvc-crt-x86_64-${{ hashFiles(format('{0}/cargo-xwin-version.txt', runner.temp)) }}
+        restore-keys: |
+          xwin-msvc-crt-x86_64-

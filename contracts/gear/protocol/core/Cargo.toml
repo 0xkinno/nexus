@@ -1,0 +1,62 @@
+[package]
+name = "gear-core"
+description = "Gear core library"
+documentation = "https://docs.rs/gear-core"
+keywords = ["gear", "wasm"]
+categories = ["wasm"]
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+gear-core-errors = { workspace = true, features = ["codec"] }
+gprimitives = { workspace = true, features = ["codec"] }
+gsys.workspace = true
+blake2.workspace = true
+parity-scale-codec = { workspace = true, features = [
+    "derive",
+    "max-encoded-len",
+] }
+scale-info = { workspace = true, features = ["derive"] }
+scale-encode.workspace = true
+scale-decode.workspace = true
+derive_more.workspace = true
+log.workspace = true
+gear-wasm-instrument.workspace = true
+wasmparser.workspace = true
+hex = { workspace = true, features = ["alloc"] }
+paste.workspace = true
+enum-iterator.workspace = true
+byteorder.workspace = true
+bytemuck = { workspace = true, features = ["must_cast", "min_const_generics"] }
+num-traits.workspace = true
+numerated.workspace = true
+
+# Optional dependencies
+serde = { workspace = true, features = ["derive"], optional = true }
+impl-serde = { workspace = true, optional = true }
+gear-workspace-hack.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
+wat.workspace = true
+proptest.workspace = true
+rand = { workspace = true, features = ["std", "std_rng"] }
+numerated = { workspace = true, features = ["mock"] }
+
+[features]
+default = []
+strict = []
+std = [
+    "serde/std",
+    "dep:impl-serde",
+    "wasmparser/std",
+    "gear-core-errors/serde",
+    "gear-wasm-instrument/std",
+    "gprimitives/serde",
+]
+mock = []

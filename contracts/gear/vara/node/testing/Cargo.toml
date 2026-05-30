@@ -1,0 +1,34 @@
+[package]
+name = "gear-node-testing"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+parity-scale-codec = { workspace = true, features = ["derive"] }
+
+# Gear
+runtime-primitives.workspace = true
+vara-runtime = { workspace = true, features = ["dev"] }
+gear-runtime-interface.workspace = true
+service = { workspace = true, features = ["vara-native"] }
+sc-service = { workspace = true, features = [ "test-helpers", "rocksdb" ] }
+substrate-test-client.workspace = true
+
+# Substrate Primitives
+sp-core.workspace = true
+sp-crypto-ec-utils = { workspace = true, features = ["bls12-381"] }
+sp-keyring.workspace = true
+sp-runtime.workspace = true
+sp-io.workspace = true
+
+# Substrate Other
+frame-system.workspace = true
+frame-metadata-hash-extension.workspace = true
+gear-workspace-hack.workspace = true

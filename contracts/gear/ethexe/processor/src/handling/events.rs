@@ -1,0 +1,245 @@
+// Copyright (C) Gear Technologies Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
+
+use super::ProcessingHandler;
+use crate::{ProcessorError, Result};
+use ethexe_common::{
+    ScheduledTask,
+    db::CodesStorageRO,
+    events::{
+        MirrorRequestEvent, RouterRequestEvent,
+        mirror::{
+            ExecutableBalanceTopUpRequestedEvent, MessageQueueingRequestedEvent,
+            OwnedBalanceTopUpRequestedEvent, ReplyQueueingRequestedEvent,
+            ValueClaimingRequestedEvent,
+        },
+        router::ProgramCreatedEvent,
+    },
+    gear::{MessageType, ValueClaim},
+    injected::InjectedTransaction,
+};
+use ethexe_runtime_common::state::{
+    Dispatch, Expiring, MailboxMessage, ModifiableStorage, PayloadLookup,
+};
+use gear_core::{ids::ActorId, message::SuccessReplyReason};
+
+impl ProcessingHandler {
+    pub(crate) fn handle_injected_transaction(
+        &mut self,
+        source: ActorId,
+        tx: InjectedTransaction,
+    ) -> Result<()> {
+        self.update_state(tx.destination, |state, storage, _| -> Result<()> {
+            if state.requires_init_message() {
+                return Err(ProcessorError::InjectedToUninitializedProgram(Box::new(tx)));
+            }
+
+            let dispatch = Dispatch::new(
+                storage,
+                tx.to_message_id(),
+                source,
+                tx.payload.to_vec(),
+                tx.value,
+                false,
+                MessageType::Injected,
+                false,
+            )?;
+
+            state
+                .injected_queue
+                .modify_queue(storage, |queue| queue.queue(dispatch));
+
+            Ok(())
+        })
+    }
+
+    pub(crate) fn handle_router_event(&mut self, event: RouterRequestEvent) -> Result<()> {
+        match event {
+            RouterRequestEvent::ProgramCreated(ProgramCreatedEvent { actor_id, code_id }) => {
+                if !self.db.code_valid(code_id).unwrap_or(false) {
+                    return Err(ProcessorError::MissingCode { actor_id, code_id });
+                }
+
+                log::trace!("Registering new program: {actor_id} with code {code_id}");
+                self.transitions.register_new(actor_id, code_id);
+            }
+            RouterRequestEvent::ValidatorsCommittedForEra { .. }
+            | RouterRequestEvent::CodeValidationRequested { .. } => {
+                log::trace!("Event is handled by other modules: {event:?}");
+            }
+            RouterRequestEvent::ComputationSettingsChanged { .. }
+            | RouterRequestEvent::StorageSlotChanged { .. } => {
+                log::debug!("Handler not yet implemented: {event:?}");
+            }
+        };
+
+        Ok(())
+    }
+
+    pub(crate) fn handle_mirror_event(
+        &mut self,
+        actor_id: ActorId,
+        event: MirrorRequestEvent,
+    ) -> Result<()> {
+        if !self.transitions.is_program(&actor_id) {
+            log::debug!("Received event from unrecognized mirror ({actor_id}): {event:?}");
+
+            return Ok(());
+        }
+
+        match event {
+            MirrorRequestEvent::OwnedBalanceTopUpRequested(OwnedBalanceTopUpRequestedEvent {
+                value,
+            }) => {
+                self.update_state(actor_id, |state, _, _| {
+                    state.balance = state
+                        .balance
+                        .checked_add(value)
+                        .expect("Overflow in state.balance += value");
+                });
+            }
+            MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                ExecutableBalanceTopUpRequestedEvent { value },
+            ) => {
+                self.update_state(actor_id, |state, _, _| {
+                    state.executable_balance = state
+                        .executable_balance
+                        .checked_add(value)
+                        .expect("Overflow in state.executable_balance += value");
+                });
+            }
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id,
+                source,
+                payload,
+                value,
+                call_reply,
+            }) => {
+                self.update_state(actor_id, |state, storage, _| -> Result<()> {
+                    let is_init = state.requires_init_message();
+
+                    let dispatch = Dispatch::new(
+                        storage,
+                        id,
+                        source,
+                        payload,
+                        value,
+                        is_init,
+                        MessageType::Canonical,
+                        call_reply,
+                    )?;
+
+                    state
+                        .canonical_queue
+                        .modify_queue(storage, |queue| queue.queue(dispatch));
+
+                    Ok(())
+                })?;
+            }
+            MirrorRequestEvent::ReplyQueueingRequested(ReplyQueueingRequestedEvent {
+                replied_to,
+                source,
+                payload,
+                value,
+            }) => {
+                self.update_state(actor_id, |state, storage, transitions| -> Result<()> {
+                    let Some(Expiring {
+                        value:
+                            MailboxMessage {
+                                value: claimed_value,
+                                ..
+                            },
+                        expiry,
+                    }) = storage.modify(&mut state.mailbox_hash, |mailbox| {
+                        mailbox.remove_and_store_user_mailbox(storage, source, replied_to)
+                    })
+                    else {
+                        return Ok(());
+                    };
+
+                    transitions.claim_value(
+                        actor_id,
+                        ValueClaim {
+                            message_id: replied_to,
+                            destination: source,
+                            value: claimed_value,
+                        },
+                    );
+
+                    transitions.remove_task(
+                        expiry,
+                        &ScheduledTask::RemoveFromMailbox((actor_id, source), replied_to),
+                    )?;
+
+                    let reply = Dispatch::new_reply(
+                        storage,
+                        replied_to,
+                        source,
+                        payload,
+                        value,
+                        MessageType::Canonical,
+                        false,
+                    )?;
+
+                    state
+                        .canonical_queue
+                        .modify_queue(storage, |queue| queue.queue(reply));
+
+                    Ok(())
+                })?;
+            }
+            MirrorRequestEvent::ValueClaimingRequested(ValueClaimingRequestedEvent {
+                claimed_id,
+                source,
+            }) => {
+                self.update_state(actor_id, |state, storage, transitions| -> Result<()> {
+                    let Some(Expiring {
+                        value:
+                            MailboxMessage {
+                                value: claimed_value,
+                                ..
+                            },
+                        expiry,
+                    }) = storage.modify(&mut state.mailbox_hash, |mailbox| {
+                        mailbox.remove_and_store_user_mailbox(storage, source, claimed_id)
+                    })
+                    else {
+                        return Ok(());
+                    };
+
+                    transitions.claim_value(
+                        actor_id,
+                        ValueClaim {
+                            message_id: claimed_id,
+                            destination: source,
+                            value: claimed_value,
+                        },
+                    );
+
+                    transitions.remove_task(
+                        expiry,
+                        &ScheduledTask::RemoveFromMailbox((actor_id, source), claimed_id),
+                    )?;
+
+                    let reply = Dispatch::reply(
+                        claimed_id,
+                        source,
+                        PayloadLookup::empty(),
+                        0,
+                        SuccessReplyReason::Auto,
+                        MessageType::Canonical,
+                        false,
+                    );
+
+                    state
+                        .canonical_queue
+                        .modify_queue(storage, |queue| queue.queue(reply));
+
+                    Ok(())
+                })?;
+            }
+        };
+
+        Ok(())
+    }
+}

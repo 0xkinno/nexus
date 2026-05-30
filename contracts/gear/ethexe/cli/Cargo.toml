@@ -1,0 +1,60 @@
+[package]
+name = "ethexe-cli"
+description = "Command-line interface for running and managing ethexe nodes"
+documentation = "https://docs.rs/ethexe-cli"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+
+[[bin]]
+name = "ethexe"
+path = "src/main.rs"
+
+[dependencies]
+ethexe-compute.workspace = true
+ethexe-network.workspace = true
+ethexe-malachite.workspace = true
+ethexe-prometheus.workspace = true
+ethexe-rpc = { workspace = true, features = ["client"] }
+ethexe-service.workspace = true
+gsigner = { workspace = true, features = [
+    "std",
+    "secp256k1",
+    "cli",
+    "peer-id",
+    "keyring",
+    "serde",
+] }
+ethexe-ethereum.workspace = true
+ethexe-common.workspace = true
+ethexe-processor.workspace = true
+ethexe-runtime-common.workspace = true
+ethexe-db.workspace = true
+gprimitives = { workspace = true, features = ["std"] }
+
+anyhow.workspace = true
+alloy-chains.workspace = true
+clap = { workspace = true, features = ["derive"] }
+directories.workspace = true
+tracing-subscriber.workspace = true
+hex.workspace = true
+jsonrpsee = { workspace = true, features = ["client"] }
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sp-core = { workspace = true, features = ["std"] }
+static_init.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+toml.workspace = true
+thiserror.workspace = true
+gear-workspace-hack.workspace = true
+indicatif = "0.18.3"
+
+[lints]
+workspace = true

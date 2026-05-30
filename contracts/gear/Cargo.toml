@@ -1,0 +1,667 @@
+[workspace.package]
+version = "1.10.0"
+authors = ["Gear Technologies"]
+edition = "2024"
+license = "GPL-3.0"
+homepage = "https://gear-tech.io"
+repository = "https://github.com/gear-tech/gear"
+rust-version = "1.91"
+
+[workspace]
+resolver = "3"
+
+default-members = ["vara/node/cli"]
+
+exclude = ["ethexe/contracts", "ethexe/docker", "ethexe/malachite", "ethexe/scripts"]
+
+members = [
+  # protocol
+  "protocol/*",
+  "protocol/lazy-pages",
+  "protocol/lazy-pages/common",
+  "protocol/lazy-pages/fuzzer",
+  "protocol/lazy-pages/fuzzer/runner",
+  "protocol/lazy-pages/interface",
+  "protocol/lazy-pages/native-interface",
+  "protocol/sandbox",
+  "protocol/sandbox/env",
+  "protocol/sandbox/host",
+  # vara
+  "vara/common",
+  "vara/common/codegen",
+  "vara/sdk/builtins/*",
+  "vara/sdk/gcli",
+  "vara/sdk/gsdk",
+  "vara/sdk/node-wrapper",
+  "vara/node/authorship",
+  "vara/node/cli",
+  "vara/node/service",
+  "vara/node/testing",
+  "vara/pallets/*",
+  "vara/runtime/*",
+  "vara/runtime/interface/sandbox",
+  "vara/tools/*",
+  "vara/tools/runtime-fuzzer/fuzz",
+  "vara/tools/regression-analysis/junit-common",
+  # ethexe
+  "ethexe/*",
+  "ethexe/malachite/core",
+  "ethexe/malachite/service",
+  "ethexe/runtime/common",
+  "ethexe/service/utils",
+  # sdk
+  "sdk/cargo-gbuild",
+  "sdk/galloc",
+  "sdk/gcore",
+  "sdk/gstd",
+  "sdk/gstd/codegen",
+  "sdk/gsys",
+  "sdk/gtest",
+  "sdk/stack-buffer",
+  "sdk/wasm-builder",
+  "sdk/wasm-optimizer",
+  "sdk/wasm-proc",
+  # sdk/examples
+  "sdk/examples/async",
+  "sdk/examples/async-critical",
+  "sdk/examples/async-custom-entry",
+  "sdk/examples/async-init",
+  "sdk/examples/async-reply-hook",
+  "sdk/examples/async-signal-entry",
+  "sdk/examples/async-tester",
+  "sdk/examples/autoreply",
+  "sdk/examples/big-data-section",
+  "sdk/examples/bls381",
+  "sdk/examples/calc-hash",
+  "sdk/examples/custom",
+  "sdk/examples/delayed-reservation-sender",
+  "sdk/examples/compose",
+  "sdk/examples/constructor",
+  "sdk/examples/create-program-reentrance",
+  "sdk/examples/ctor",
+  "sdk/examples/delayed-sender",
+  "sdk/examples/distributor",
+  "sdk/examples/fungible-token",
+  "sdk/examples/stack-allocations",
+  "sdk/examples/futures-unordered",
+  "sdk/examples/gas-burned",
+  "sdk/examples/incomplete-async-payloads",
+  "sdk/examples/inheritor-in-error-reply",
+  "sdk/examples/init-fail-sender",
+  "sdk/examples/init-wait",
+  "sdk/examples/init-wait-reply-exit",
+  "sdk/examples/messenger",
+  "sdk/examples/mul-by-const",
+  "sdk/examples/ncompose",
+  "sdk/examples/node",
+  "sdk/examples/out-of-memory",
+  "sdk/examples/panic-payload",
+  "sdk/examples/piggy-bank",
+  "sdk/examples/ping",
+  "sdk/examples/program-factory",
+  "sdk/examples/program-generator",
+  "sdk/examples/proxy",
+  "sdk/examples/proxy-broker",
+  "sdk/examples/proxy-relay",
+  "sdk/examples/proxy-reservation-with-gas",
+  "sdk/examples/read-big-state",
+  "sdk/examples/reservation-manager",
+  "sdk/examples/reserve-gas",
+  "sdk/examples/rwlock",
+  "sdk/examples/send-from-reservation",
+  "sdk/examples/signal-entry",
+  "sdk/examples/state-rollback",
+  "sdk/examples/sync-duplicate",
+  "sdk/examples/syscalls",
+  "sdk/examples/syscall-error",
+  "sdk/examples/value-sender",
+  "sdk/examples/vec",
+  "sdk/examples/wait",
+  "sdk/examples/wait-timeout",
+  "sdk/examples/wait_wake",
+  "sdk/examples/waiter",
+  "sdk/examples/waiting-proxy",
+  "sdk/examples/wat",
+  # utils
+  "utils/*",
+]
+
+[workspace.dependencies]
+gear-workspace-hack = "0.1.0"
+
+alloy = "2.0"
+alloy-chains = "0.2.33"
+alloy-primitives = { version = "1.5.7", default-features = false }
+alloy-sol-types = { version = "1.5.7", default-features = false }
+anyhow = { version = "1.0.86", default-features = false }
+arbitrary = "1.3.2"
+async-recursion = "1.1.1"
+async-trait = "0.1.81"
+base64 = "0.21.7"
+derive-where = "1.5"
+bytemuck = "1.23.2"
+byteorder = { version = "1.5.0", default-features = false }
+blake2 = { version = "0.10.6", default-features = false }
+bs58 = { version = "0.5.1", default-features = false }
+cargo_toml = "0.21.0"
+cargo_metadata = "0.20.0"
+clap = "4.5.8"
+colored = "2.1.0"
+const-str = "0.5"
+crossbeam = "0.8.4"
+defer = "0.2.1"
+derive_more = { version = "2.0.1", default-features = false, features = [
+    "full",
+] }
+auto_impl = "1.3.0"
+dirs = "4.0.0"
+dyn-clonable = "0.9.0"
+enum-iterator = "1.5.0"
+environmental = "1.1.3"
+flate2 = "1"
+futures = { version = "0.3", default-features = false }
+futures-timer = "3.0.3"
+future-timing = "0.1.0" # measure the futures execution
+hashbrown = "0.14.5"
+hex = { version = "0.4.3", default-features = false }
+hex-literal = "0.4.1"
+impl-trait-for-tuples = "0.2.2"
+impl-serde = "0.4.0"
+indoc = "2.0.7"
+jsonrpsee = { version = "^0.24" }
+libc = { version = "0.2", default-features = false }
+log = { version = "0.4.22", default-features = false }
+num_enum = { version = "0.6.1", default-features = false }
+numerated = { version = "2.0.1", default-features = false }
+parity-scale-codec = { version = "3.7.5", default-features = false }
+parking_lot = "0.12.3"
+path-clean = "1.0.1"
+primitive-types = { version = "0.12.2", default-features = false }
+proc-macro2 = { version = "1", default-features = false }
+prometheus = { version = "0.14.0", default-features = false }
+proptest = "1.5.0"
+quick-xml = "0.28"
+quote = { version = "1.0.36", default-features = false }
+rand = { version = "0.8", default-features = false }
+rayon = { version = "1.11.0" }
+regex = "^1.9"
+region = "3.0.2"
+reqwest = { version = "0.12.8", default-features = false }
+scale-info = { version = "2.11", default-features = false }
+scale-decode = "0.16.0"
+scale-encode = "0.10.0"
+serde = { version = "^1", default-features = false }
+serde_json = { version = "1.0.135", default-features = false, features = [
+    "alloc",
+] }
+serde-json-wasm = { version = "1.0.1", default-features = false }
+sha-1 = "0.10.1"
+snapbox = "0.6.24"
+static_init = "1.0.3"
+subxt = "0.44.0"
+syn = "2.0.71"
+thiserror = { version = "2.0.12", default-features = false }
+tokio = { version = "1.38.0" }
+lru = "0.16.1"
+url = "2.5.2"
+wat = "1.0.71"
+wasmtime = { version = "44.0.1", features = ["winch"] }
+wasmparser = { version = "0.230", default-features = false, features = ["validate", "features"] }
+which = "4.4.2"
+winapi = "0.3.9"
+paste = "1.0"
+tempfile = "3.19"
+ark-std = { version = "0.4.0", default-features = false }
+ark-bls12-381 = { version = "0.4.0", default-features = false }
+ark-serialize = { version = "0.4", default-features = false }
+ark-ec = { version = "0.4.2", default-features = false }
+ark-ff = { version = "0.4.2", default-features = false }
+ark-scale = { version = "0.0.12", default-features = false }
+sha2 = { version = "0.10.8", default-features = false }
+sha3 = { version = "0.10.8", default-features = false }
+arrayvec = { version = "0.7.4", default-features = false }
+indexmap = { version = "2.2.6", default-features = false }
+tracing = { version = "0.1.40", default-features = false }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+assert_matches = "1.5.0"
+nonempty = { version = "0.12.0", default-features = false }
+cc = "1.2.37"
+tap = "1.0.1"
+ntest = "0.9.3"
+dashmap = "5.5.3"
+delegate = "0.13.5"
+moka = "0.12.15"
+
+# metrics
+metrics = "0.24.0"
+metrics-derive = "0.1"
+metrics-exporter-prometheus = { version = "0.16.0", default-features = false }
+
+# Published deps
+#
+# https://github.com/gear-tech/gear-dlmalloc/tree/0.2.0
+dlmalloc = { package = "gear-dlmalloc", version = "0.2.0" }
+
+# Internal deps
+authorship = { package = "gear-authorship", path = "vara/node/authorship" }
+builtins-common = { path = "vara/sdk/builtins/common", default-features = false }
+common = { package = "gear-common", path = "vara/common", default-features = false }
+core-processor = { package = "gear-core-processor", path = "protocol/processor", default-features = false }
+galloc = { path = "sdk/galloc" }
+gbuiltin-bls381 = { path = "vara/sdk/builtins/bls381", default-features = false }
+gbuiltin-eth-bridge = { path = "vara/sdk/builtins/eth-bridge", default-features = false }
+gbuiltin-staking = { path = "vara/sdk/builtins/staking" }
+gbuiltin-proxy = { path = "vara/sdk/builtins/proxy" }
+gcore = { path = "sdk/gcore" }
+gcli = { path = "vara/sdk/gcli" }
+gear-node-wrapper = { path = "vara/sdk/node-wrapper" }
+gsdk = { path = "vara/sdk/gsdk" }
+gsdk-codegen = { path = "vara/sdk/gsdk/codegen" }
+gstd = { path = "sdk/gstd", features = ["nightly"] }
+gstd-codegen = { path = "sdk/gstd/codegen" }
+gsigner = { path = "protocol/gsigner", default-features = false }
+gsys = { path = "sdk/gsys" }
+gtest = { path = "sdk/gtest" }
+gprimitives = { path = "protocol/gprimitives", default-features = false }
+gear-authorship = { path = "vara/node/authorship" }
+gear-core-backend = { path = "protocol/backend", default-features = false }
+gear-call-gen = { path = "vara/tools/call-gen" }
+gear-common = { path = "vara/common", default-features = false }
+gear-common-codegen = { path = "vara/common/codegen" }
+gear-core = { path = "protocol/core", default-features = false }
+gear-core-errors = { path = "protocol/errors" }
+gear-core-processor = { path = "protocol/processor", default-features = false }
+gear-lazy-pages = { path = "protocol/lazy-pages" }
+gear-lazy-pages-common = { path = "protocol/lazy-pages/common", default-features = false }
+gear-lazy-pages-interface = { path = "protocol/lazy-pages/interface", default-features = false }
+gear-lazy-pages-native-interface = { path = "protocol/lazy-pages/native-interface" }
+gear-node-testing = { path = "vara/node/testing" }
+gear-runtime-common = { path = "vara/runtime/common", default-features = false }
+gear-runtime-interface = { path = "vara/runtime/interface", default-features = false }
+gear-sandbox-interface = { path = "vara/runtime/interface/sandbox", default-features = false }
+gear-runtime-primitives = { path = "vara/runtime/primitives", default-features = false }
+gear-sandbox = { path = "protocol/sandbox", default-features = false }
+gear-sandbox-env = { path = "protocol/sandbox/env", default-features = false }
+gear-sandbox-host = { path = "protocol/sandbox/host" }
+gear-service = { path = "vara/node/service", default-features = false }
+gear-stack-buffer = { path = "sdk/stack-buffer" }
+gear-ss58 = { path = "protocol/ss58", default-features = false }
+gear-utils = { path = "utils/utils" }
+gear-wasm-builder = { path = "sdk/wasm-builder", default-features = false }
+gear-wasm-optimizer = { path = "sdk/wasm-optimizer", default-features = false }
+gear-wasm-gen = { path = "protocol/wasm-gen" }
+gear-wasm-instrument = { path = "protocol/wasm-instrument", default-features = false }
+junit-common = { path = "vara/tools/regression-analysis/junit-common" }
+actor-system-error = { path = "protocol/actor-system-error" }
+pallet-gear = { path = "vara/pallets/gear", default-features = false }
+pallet-gear-eth-bridge = { path = "vara/pallets/gear-eth-bridge", default-features = false }
+pallet-gear-eth-bridge-primitives = { path = "vara/pallets/gear-eth-bridge/primitives", default-features = false }
+pallet-gear-eth-bridge-rpc = { path = "vara/pallets/gear-eth-bridge/rpc", default-features = false }
+pallet-gear-eth-bridge-rpc-runtime-api = { path = "vara/pallets/gear-eth-bridge/rpc/runtime-api", default-features = false }
+pallet-gear-gas = { path = "vara/pallets/gas", default-features = false }
+pallet-gear-messenger = { path = "vara/pallets/gear-messenger", default-features = false }
+pallet-gear-payment = { path = "vara/pallets/payment", default-features = false }
+pallet-gear-program = { path = "vara/pallets/gear-program", default-features = false }
+pallet-gear-rpc = { path = "vara/pallets/gear/rpc" }
+pallet-gear-rpc-runtime-api = { path = "vara/pallets/gear/rpc/runtime-api", default-features = false }
+pallet-gear-scheduler = { path = "vara/pallets/gear-scheduler", default-features = false }
+pallet-gear-staking-rewards = { path = "vara/pallets/staking-rewards", default-features = false }
+pallet-gear-staking-rewards-rpc = { path = "vara/pallets/staking-rewards/rpc" }
+pallet-gear-staking-rewards-rpc-runtime-api = { path = "vara/pallets/staking-rewards/rpc/runtime-api", default-features = false }
+pallet-gear-voucher = { path = "vara/pallets/gear-voucher", default-features = false }
+pallet-gear-bank = { path = "vara/pallets/gear-bank", default-features = false }
+pallet-gear-builtin = { path = "vara/pallets/gear-builtin", default-features = false }
+pallet-gear-builtin-rpc = { path = "vara/pallets/gear-builtin/rpc" }
+pallet-gear-builtin-rpc-runtime-api = { path = "vara/pallets/gear-builtin/rpc/runtime-api", default-features = false }
+pallet-grandpa-signer = { path = "vara/pallets/grandpa-signer", default-features = false }
+runtime-primitives = { package = "gear-runtime-primitives", path = "vara/runtime/primitives", default-features = false }
+service = { package = "gear-service", path = "vara/node/service", default-features = false }
+testing = { package = "gear-node-testing", path = "vara/node/testing" }
+vara-runtime = { path = "vara/runtime/vara", default-features = false }
+
+# ethexe deps
+ethexe-observer = { path = "ethexe/observer", default-features = false }
+ethexe-db = { path = "ethexe/db", default-features = false }
+ethexe-network = { path = "ethexe/network", default-features = false }
+ethexe-processor = { path = "ethexe/processor", default-features = false }
+ethexe-runtime = { path = "ethexe/runtime", default-features = false }
+ethexe-sdk = { path = "ethexe/sdk", default-features = false }
+ethexe-service = { path = "ethexe/service", default-features = false }
+ethexe-service-utils = { path = "ethexe/service/utils", default-features = false }
+ethexe-consensus = { path = "ethexe/consensus", default-features = false }
+ethexe-ethereum = { path = "ethexe/ethereum", default-features = false }
+ethexe-runtime-common = { path = "ethexe/runtime/common", default-features = false }
+ethexe-prometheus = { path = "ethexe/prometheus", default-features = false }
+ethexe-rpc = { path = "ethexe/rpc", default-features = false }
+ethexe-common = { path = "ethexe/common", default-features = false }
+ethexe-compute = { path = "ethexe/compute", default-features = false }
+ethexe-blob-loader = { path = "ethexe/blob-loader", default-features = false }
+ethexe-db-init = { path = "ethexe/db/init", default-features = false }
+ethexe-node-wrapper = {path = "ethexe/node-wrapper", default-features = false}
+ethexe-malachite = { path = "ethexe/malachite/service", default-features = false }
+ethexe-malachite-core = { path = "ethexe/malachite/core", default-features = false }
+
+# libp2p-identity for ethexe-malachite-core's swarm peer-id derivation.
+libp2p-identity = { version = "0.2", default-features = false, features = ["secp256k1"] }
+# Pinned at the version `ethexe-db`'s librocksdb-sys uses — only one
+# `links = "rocksdb"` crate may live in the dependency graph.
+rocksdb = { version = "0.21", default-features = false, features = ["snappy"] }
+
+# Malachite BFT engine — canonical fork at circlefin/malachite, pinned so
+# all sub-crates share the same snapshot.
+malachitebft-app-channel     = { package = "arc-malachitebft-app-channel",    git = "https://github.com/circlefin/malachite", rev = "1fe7961aca933cefad8e4d9a52f50eda565288e7" }
+malachitebft-app             = { package = "arc-malachitebft-app",            git = "https://github.com/circlefin/malachite", rev = "1fe7961aca933cefad8e4d9a52f50eda565288e7" }
+malachitebft-codec           = { package = "arc-malachitebft-codec",          git = "https://github.com/circlefin/malachite", rev = "1fe7961aca933cefad8e4d9a52f50eda565288e7" }
+malachitebft-core-consensus  = { package = "arc-malachitebft-core-consensus", git = "https://github.com/circlefin/malachite", rev = "1fe7961aca933cefad8e4d9a52f50eda565288e7" }
+malachitebft-core-types      = { package = "arc-malachitebft-core-types",     git = "https://github.com/circlefin/malachite", rev = "1fe7961aca933cefad8e4d9a52f50eda565288e7" }
+malachitebft-engine          = { package = "arc-malachitebft-engine",         git = "https://github.com/circlefin/malachite", rev = "1fe7961aca933cefad8e4d9a52f50eda565288e7" }
+malachitebft-proto           = { package = "arc-malachitebft-proto",          git = "https://github.com/circlefin/malachite", rev = "1fe7961aca933cefad8e4d9a52f50eda565288e7" }
+malachitebft-signing         = { package = "arc-malachitebft-signing",        git = "https://github.com/circlefin/malachite", rev = "1fe7961aca933cefad8e4d9a52f50eda565288e7" }
+malachitebft-signing-ed25519 = { package = "arc-malachitebft-signing-ed25519", git = "https://github.com/circlefin/malachite", rev = "1fe7961aca933cefad8e4d9a52f50eda565288e7" }
+malachitebft-signing-ecdsa   = { package = "arc-malachitebft-signing-ecdsa",   git = "https://github.com/circlefin/malachite", rev = "1fe7961aca933cefad8e4d9a52f50eda565288e7", default-features = false, features = ["k256", "rand", "serde", "std"] }
+malachitebft-sync            = { package = "arc-malachitebft-sync",           git = "https://github.com/circlefin/malachite", rev = "1fe7961aca933cefad8e4d9a52f50eda565288e7" }
+malachitebft-test            = { package = "arc-malachitebft-test",           git = "https://github.com/circlefin/malachite", rev = "1fe7961aca933cefad8e4d9a52f50eda565288e7" }
+
+# Common executor between `sandbox-host` and `lazy-pages-fuzzer`
+wasmi = { version = "0.38" }
+
+# Substrate deps
+bp-header-chain = { version = "0.18.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+binary-merkle-tree = { version = "15.0.1", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+frame-benchmarking = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+frame-benchmarking-cli = { version = "43.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+frame-election-provider-support = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+frame-executive = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+frame-support = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+frame-support-test = { version = "3.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+frame-system = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+frame-system-benchmarking = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+frame-remote-externalities = { version = "0.46.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+frame-try-runtime = { version = "0.44.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+frame-system-rpc-runtime-api = { version = "34.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+
+frame-metadata-hash-extension = { default-features = false, git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+
+
+generate-bags = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+pallet-authorship = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-authority-discovery = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-babe = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-bags-list = { version = "37.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-bounties = { version = "37.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-child-bounties = { version = "37.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-balances = { version = "39.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-conviction-voting = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-election-provider-multi-phase = { version = "37.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-grandpa = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-identity = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-im-online = { version = "37.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-multisig = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-nomination-pools = { version = "35.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-nomination-pools-runtime-api = { version = "33.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-offences = { version = "37.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-preimage = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-proxy = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-ranked-collective = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-referenda = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-scheduler = { version = "39.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-session = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-staking = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-staking-runtime-api = { version = "24.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-staking-reward-fn = { version = "22.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-sudo = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-timestamp = { version = "37.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-transaction-payment = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-transaction-payment-rpc = { version = "41.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-transaction-payment-rpc-runtime-api = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-treasury = { version = "37.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-utility = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-vesting = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+pallet-whitelist = { version = "37.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+prometheus-endpoint = { package = "substrate-prometheus-endpoint", version = "0.17.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-authority-discovery = { version = "0.45.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-block-builder = { version = "0.42.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-consensus = { version = "0.44.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-consensus-babe = { version = "0.45.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-consensus-babe-rpc = { version = "0.45.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-consensus-slots = { version = "0.44.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sp-crypto-ec-utils = { version = "0.14.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-debug-derive = { version = "14.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sc-chain-spec = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-cli = { version = "0.47.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-client-api = { version = "37.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-executor = { version = "0.40.1", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-executor-common = { version = "0.35.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-consensus-grandpa = { version = "0.30.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-consensus-grandpa-rpc = { version = "0.30.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-network = { version = "0.45.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-network-sync = { version = "0.44.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-offchain = { version = "40.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-proposer-metrics = { version = "0.18.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-service = { version = "0.46.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-telemetry = { version = "25.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-rpc = { version = "40.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-sync-state-rpc = { version = "0.45.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-sysinfo = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-transaction-pool = { version = "37.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-transaction-pool-api = { version = "37.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sc-tracing = { version = "37.0.1", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+sp-allocator = { version = "29.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-api = { version = "34.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-authority-discovery = { version = "34.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-arithmetic = { version = "26.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-blockchain = { version = "37.0.1", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-block-builder = { version = "34.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-core = { version = "34.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-consensus = { version = "0.40.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-consensus-babe = { version = "0.40.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-consensus-slots = { version = "0.40.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-application-crypto = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-externalities = { version = "0.29.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-consensus-grandpa = { version = "21.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-genesis-builder = { version = "0.15.1", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-inherents = { version = "34.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-io = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-keyring = { version = "39.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-keystore = { version = "0.40.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-npos-elections = { version = "34.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-offchain = { version = "34.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-rpc = { version = "32.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-runtime = { version = "39.0.1", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-runtime-interface = { version = "28.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-session = { version = "36.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-std = { version = "14.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-state-machine = { version = "0.43.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-staking = { version = "36.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-storage = { version = "21.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-timestamp = { version = "34.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-transaction-pool = { version = "34.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-transaction-storage-proof = { version = "34.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-trie = { version = "37.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-version = { version = "37.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-wasm-interface = { version = "21.0.1", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+sp-wasm-interface-common = { version = "7.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime", default-features = false }
+substrate-build-script-utils = { version = "11.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+substrate-frame-rpc-system = { version = "39.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+substrate-rpc-client = { version = "0.44.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+substrate-state-trie-migration-rpc = { version = "38.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+substrate-test-client = { version = "2.0.0", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+substrate-wasm-builder = { version = "24.0.1", git = "https://github.com/gear-tech/polkadot-sdk.git", branch = "gear-polkadot-stable2409-updated-wasmtime" }
+
+# Examples
+test-syscalls = { path = "sdk/examples/syscalls", default-features = false }
+demo-async = { path = "sdk/examples/async" }
+demo-async-critical = { path = "sdk/examples/async-critical" }
+demo-async-custom-entry = { path = "sdk/examples/async-custom-entry" }
+demo-async-init = { path = "sdk/examples/async-init" }
+demo-async-reply-hook = { path = "sdk/examples/async-reply-hook" }
+demo-async-recursion = { path = "sdk/examples/async-recursion" }
+demo-async-signal-entry = { path = "sdk/examples/async-signal-entry" }
+demo-async-tester = { path = "sdk/examples/async-tester" }
+demo-bls381 = { path = "sdk/examples/bls381" }
+demo-calc-hash = { path = "sdk/examples/calc-hash" }
+demo-calc-hash-in-one-block = { path = "sdk/examples/calc-hash/in-one-block" }
+demo-calc-hash-over-blocks = { path = "sdk/examples/calc-hash/over-blocks" }
+demo-custom = { path = "sdk/examples/custom" }
+demo-delayed-reservation-sender = { path = "sdk/examples/delayed-reservation-sender" }
+demo-compose = { path = "sdk/examples/compose" }
+demo-constructor = { path = "sdk/examples/constructor", default-features = false }
+demo-create-program-reentrance = { path = "sdk/examples/create-program-reentrance" }
+demo-delayed-sender = { path = "sdk/examples/delayed-sender" }
+demo-distributor = { path = "sdk/examples/distributor" }
+demo-futures-unordered = { path = "sdk/examples/futures-unordered", features = [
+    "debug",
+] }
+demo-gas-burned = { path = "sdk/examples/gas-burned" }
+demo-fungible-token = { path = "sdk/examples/fungible-token" }
+demo-init-fail-sender = { path = "sdk/examples/init-fail-sender" }
+demo-init-wait = { path = "sdk/examples/init-wait", default-features = false }
+demo-init-wait-reply-exit = { path = "sdk/examples/init-wait-reply-exit" }
+demo-messenger = { path = "sdk/examples/messenger" }
+demo-mul-by-const = { path = "sdk/examples/mul-by-const" }
+demo-out-of-memory = { path = "sdk/examples/out-of-memory" }
+demo-panic-payload = { path = "sdk/examples/panic-payload" }
+demo-piggy-bank = { path = "sdk/examples/piggy-bank", features = ["debug"] }
+demo-ping = { path = "sdk/examples/ping" }
+demo-program-factory = { path = "sdk/examples/program-factory" }
+demo-program-generator = { path = "sdk/examples/program-generator" }
+demo-proxy = { path = "sdk/examples/proxy", default-features = false }
+demo-proxy-relay = { path = "sdk/examples/proxy-relay" }
+demo-proxy-reservation-with-gas = { path = "sdk/examples/proxy-reservation-with-gas" }
+demo-read-big-state = { path = "sdk/examples/read-big-state", default-features = false }
+demo-reply-callback = { path = "sdk/examples/reply-callback" }
+demo-reservation-manager = { path = "sdk/examples/reservation-manager" }
+demo-reserve-gas = { path = "sdk/examples/reserve-gas", default-features = false }
+demo-rwlock = { path = "sdk/examples/rwlock" }
+demo-send-from-reservation = { path = "sdk/examples/send-from-reservation" }
+demo-signal-entry = { path = "sdk/examples/signal-entry", default-features = false }
+demo-staking-broker = { path = "sdk/examples/staking-broker" }
+demo-proxy-broker = { path = "sdk/examples/proxy-broker" }
+demo-state-rollback = { path = "sdk/examples/state-rollback" }
+demo-sync-duplicate = { path = "sdk/examples/sync-duplicate" }
+demo-vec = { path = "sdk/examples/vec" }
+demo-value-sender = { path = "sdk/examples/value-sender" }
+demo-wait = { path = "sdk/examples/wait" }
+demo-waiter = { path = "sdk/examples/waiter", default-features = false }
+demo-wait-timeout = { path = "sdk/examples/wait-timeout" }
+demo-waiting-proxy = { path = "sdk/examples/waiting-proxy" }
+demo-wat = { path = "sdk/examples/wat" }
+
+# TODO: fix demos' feature resolving bug with workspace build
+demo-value-sender-ethexe = { path = "sdk/examples/value-sender-ethexe" }
+demo-delayed-sender-ethexe = { path = "sdk/examples/delayed-sender-ethexe" }
+demo-syscalls-ethexe = { path = "sdk/examples/syscalls-ethexe" }
+
+# Dependencies that only used in one package
+#
+# TODO: remove these dependencies (from this file?) or add more docs.
+
+atomic_enum = "0.3.0"
+cfg-if = "1.0.0" # gear-lazy-pages
+cargo-http-registry = "0.1.6" # crates-io
+core_affinity = "0.8.3" # lazy-pages-fuzzer
+env_logger = "0.11.8" # lazy-pages-fuzzer
+errno = "0.3" # gear-lazy-pages
+nix = "0.26.4" # gear-lazy-pages
+ipc-channel = "0.19.0" # lazy-pages-fuzzer
+itertools = { version = "0.13", default-features = false } # sdk/wasm-builder
+libp2p = "=0.51.4" # vara/sdk/gcli (same version as sc-consensus)
+mimalloc = { version = "0.1.46", default-features = false } # vara/node/cli
+nacl = "0.5.3" # vara/sdk/gcli
+libfuzzer-sys = "0.4" # vara/tools/runtime-fuzzer/fuzz
+pathdiff = { version = "0.2.1", default-features = false } # sdk/wasm-builder
+rand_chacha = { version = "0.9.0", default-features = false } # lazy-pages-fuzzer
+rand_pcg = "0.3.1" # vara/pallets/gear
+rustc_version = "0.4.1" # sdk/wasm-builder
+schnorrkel = "0.11.4" # vara/sdk/gcli
+scopeguard = { version = "1.2.0", default-features = false } # vara/pallets/gear
+hyper = "1.4.1" # ethexe/rpc
+tabled = "0.10.0" # vara/tools/regression-analysis
+thousands = "0.2.0" # vara/tools/regression-analysis
+toml = "0.8.14" # sdk/wasm-builder
+tower = "0.4.13" # ethexe/rpc
+tower-http = "0.5.2" # ethexe/rpc
+tracing-appender = "0.2" # vara/tools/node-loader
+trybuild = "1" # sdk/gstd/codegen
+wasmprinter = "0.230" # protocol/wasm-gen
+fail = "0.5" # gear-common
+heck = "0.5.0" # gsdk-api-gen
+etc = "0.1.19" # vara/sdk/gcli
+toml_edit = "0.22.12" # crates-io
+directories = "5.0.1" # vara/tools/key-finder
+num-traits = { version = "0.2", default-features = false } # gear-core
+glob = "0.3.1" # cargo-gbuild
+smallvec = "1.13.2" # vara/sdk/node-wrapper
+bytes = "1.8.0" # ethexe/malachite/core
+wasm-smith = { version = "0.230", features = ["wasmparser"] } # protocol/wasm-gen
+wasm-encoder = { version = "0.230", default-features = false, features = [
+    "wasmparser",
+] } # protocol/wasm-instrument
+async-broadcast = "0.7.2" # ethexe/service
+ip_network = "0.4.1" # ethexe/network
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(fuzz)',
+    'cfg(substrate_runtime)',
+] }
+
+[workspace.metadata.cargo-shear]
+ignored = [
+    "gear-workspace-hack",
+    "frame-benchmarking",
+    "frame-system-benchmarking",
+    "frame-system-rpc-runtime-api",
+    "vara-runtime",
+    "scale-decode",
+    "scale-info",
+    "parity-scale-codec",
+    "pallet-authorship",
+    "pallet-timestamp",
+    "sp-application-crypto",
+    "ethexe-sdk",
+]
+
+[profile.release]
+panic = "unwind"
+
+[profile.release.package.gcore]
+opt-level = "s"
+
+[profile.release.package.gstd]
+opt-level = "s"
+
+[profile.release.package.galloc]
+opt-level = "s"
+
+[profile.release.package.gtest]
+opt-level = "s"
+
+[profile.production]
+inherits = "release"
+strip = true
+
+# Sacrifice compile speed for execution speed by using optimization flags:
+
+# https://doc.rust-lang.org/rustc/linker-plugin-lto.html
+lto = "fat"
+# https://doc.rust-lang.org/rustc/codegen-options/index.html#codegen-units
+codegen-units = 1
+
+[profile.profiling]
+inherits = "release"
+debug = true
+
+[patch.crates-io]
+gear-workspace-hack = { path = "utils/gear-workspace-hack" }
+# core2 0.4.0 was yanked on crates.io; pin upstream git so cargo metadata doesn't fail on yanked lookup.
+# Needed by cid -> sc-network transitive; triggers during wasm-builder sub-project resolve.
+core2 = { git = "https://github.com/bbqsrc/core2", rev = "545e84bcb0f235b12e21351e0c69767958efe2a7" }
+
+# these patched dependecies force their `sign_ext` feature to be used by Substrate dependencies
+parity-wasm = { version = "0.45.0", git = "https://github.com/gear-tech/parity-wasm", branch = "v0.45.0-sign-ext" }
+wasmi-validation = { version = "0.5.0", git = "https://github.com/gear-tech/wasmi", branch = "v0.13.2-sign-ext" }
+wasm-instrument = { version = "0.4.0", git = "https://github.com/gear-tech/wasm-instrument", branch = "v0.4.0-sign-ext" }
+
+# there are patches to disable `memory.grow` and to add offset of reserved memory
+wasm-smith = { version = "0.230", git = "https://github.com/gear-tech/wasm-tools", branch = "gear-stable-1.230" }

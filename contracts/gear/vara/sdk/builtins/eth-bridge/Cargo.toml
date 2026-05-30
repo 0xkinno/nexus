@@ -1,0 +1,25 @@
+[package]
+name = "gbuiltin-eth-bridge"
+description = "Entities for working with Gear builtin actor providing `pallet-gear-eth-bridge` interface"
+documentation = "https://docs.rs/gbuiltin-eth-bridge"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+parity-scale-codec = { workspace = true, features = ["derive"] }
+scale-info = { workspace = true, features = ["derive"] }
+gprimitives.workspace = true
+gear-workspace-hack.workspace = true
+
+[features]
+default = ["std"]
+std = [
+    "parity-scale-codec/std",
+    "scale-info/std",
+    "gprimitives/std",
+]

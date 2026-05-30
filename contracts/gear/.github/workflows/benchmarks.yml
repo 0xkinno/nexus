@@ -1,0 +1,119 @@
+name: Benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      change-type:
+        description: How should changes be made after the benchmarks are completed?
+        required: true
+        default: ignore
+        type: choice
+        options:
+          - ignore
+          - commit
+          - pull_request
+      selected_pallet:
+        description: "Name of the pallet to benchmark (e.g.: pallet_gear)."
+        required: true
+        default: '*'
+      selected_extrinsics:
+        description: "Comma-separated list of extrinsics to benchmark (e.g.: gr_reply,gr_wait)."
+        required: true
+        default: '*'
+
+concurrency:
+  group: benchmarks
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  TERM: xterm-256color
+
+jobs:
+  benchmarks:
+    runs-on: [bench-runner]
+    timeout-minutes: 720
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: "ACTIONS: Checkout"
+        uses: actions/checkout@v6
+
+      - name: "Install: Rust toolchain"
+        uses: ./.github/actions/install-rust
+
+      - name: "Install: Build deps"
+        run: |
+          sudo apt update
+          sudo apt install -y git clang curl libssl-dev llvm libudev-dev cmake wabt protobuf-compiler wget bzip2
+          sudo apt install -y linux-tools-common linux-tools-generic
+          curl -o wasm-opt-linux-x64.tar.gz -L `curl -s https://api.github.com/repos/WebAssembly/binaryen/releases/latest | jq -r '.assets[] | select(.name | contains("x86_64-linux")) | .browser_download_url' |grep -v sha256`
+          tar xzf wasm-opt-linux-x64.tar.gz && sudo mv binaryen-version_*/bin/* /usr/local/bin/
+          wasm-opt --version
+
+      - name: Tune CPU frequency
+        env:
+          BENCHMARK_CPU_MAX_FREQ_KHZ: "3000000"
+        run: ./scripts/benchmarking/tune_cpu_frequency.sh
+
+      - name: Run all benchmarks
+        id: run-bench
+        env:
+          SELECTED_PALLET: ${{ inputs.selected_pallet }}
+          SELECTED_EXTRINSICS: ${{ inputs.selected_extrinsics }}
+        run: ./scripts/benchmarking/run_all_benchmarks.sh -c vara-dev -m
+
+      - name: "ACTIONS: Upload error artifact"
+        id: upload-errors
+        # This step will only run if the run-bench step failed
+        if: ${{ failure() && steps.run-bench.conclusion == 'failure' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmarking-errors
+          path: scripts/benchmarking/benchmarking_errors.txt
+          if-no-files-found: ignore
+
+      - name: "ACTIONS: Upload weights artifact"
+        # This step will run if benchmarking finished with no errors (upload-errors step was skipped),
+        # This runs even if baremetal patching was failed - in that case, make sure to handle it.
+        if: ${{ !cancelled() && steps.upload-errors.conclusion == 'skipped'}}
+        uses: actions/upload-artifact@v7
+        with:
+          name: weights-output
+          path: scripts/benchmarking/weights-output
+
+      - name: "Apply weights to codebase"
+        if: ${{ inputs.change-type != 'ignore' }}
+        run: ./scripts/benchmarking/apply_weights.sh
+
+      - name: Create commit
+        if: ${{ inputs.change-type == 'commit' }}
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: "chore(runtime): update weights"
+          file_pattern: >-
+            protocol/core/src/gas_metering/schedule.rs
+            vara/pallets/*/src/weights.rs
+            vara/runtime/vara/src/weights/
+
+      - name: Create pull request
+        if: ${{ inputs.change-type == 'pull_request' }}
+        uses: peter-evans/create-pull-request@v8
+        with:
+          add-paths: |
+            protocol/core/src/gas_metering/schedule.rs
+            vara/pallets/*/src/weights.rs
+            vara/runtime/vara/src/weights/
+          commit-message: update weights
+          branch: weights/patch
+          branch-suffix: short-commit-hash
+          title: "chore(vara): update weights"
+          body: |
+            `run_all_benchmarks.sh` script is applied to update weights (branch: `${{ github.ref_name }}`, commit ${{ github.sha }})
+
+            **Note:** If CI fails, try manually updating the heuristic tests: `vara/runtime/vara/src/tests/mod.rs`
+          labels: |
+            type: chore
+            scope: vara
+            ai-friendly

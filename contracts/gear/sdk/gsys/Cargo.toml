@@ -1,0 +1,20 @@
+[package]
+name = "gsys"
+description = "System calls of Gear program"
+documentation = "https://docs.rs/gsys"
+keywords = ["gear", "wasm"]
+categories = ["wasm", "api-bindings"]
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+bytemuck = { workspace = true, features = ["derive"] }
+gear-workspace-hack.workspace = true
+
+[features]
+ethexe = []

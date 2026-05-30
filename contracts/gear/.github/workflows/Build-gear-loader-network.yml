@@ -1,0 +1,50 @@
+name: Build gear loader
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-gear-loader:
+    runs-on: [kuberunner]
+    steps:
+      - name: "ACTIONS: Checkout"
+        uses: actions/checkout@v6
+
+      - name: "Install: Rust toolchain"
+        uses: ./.github/actions/install-rust
+        
+      - name: "Build gear-loader"
+        run: |
+          cargo build --release --locked --package gear-node-loader
+
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: gear-loader
+          path: |
+            target/release/gear-node-loader
+
+  update-gear-loader:
+    runs-on: ubuntu-latest
+    needs: build-gear-loader
+    steps:
+      - name: "ACTIONS: Checkout"
+        uses: actions/checkout@v6
+
+      - name: Download artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: gear-loader
+
+      - name: Run playbook
+        uses: dawidd6/action-ansible-playbook@v9
+        with:
+          directory: ./.github/ansible/
+          playbook: gear-loader-update.yaml
+          key: ${{secrets.SSH_PRIVATE_KEY}}
+          inventory: |
+            [all]
+            ${{secrets.GEAR_LOADER_NODE}}

@@ -1,0 +1,103 @@
+[package]
+name = "pallet-gear-builtin"
+description = "Builtin runtime actor providing runtime-related logic to program actors"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme = "README.md"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+parity-scale-codec = { workspace = true, features = ["derive"] }
+scale-info = { workspace = true, features = ["derive", "serde"] }
+primitive-types = { workspace = true, features = ["scale-info"] }
+log.workspace = true
+impl-trait-for-tuples.workspace = true
+ark-std = { workspace = true, optional = true }
+
+common.workspace = true
+core-processor.workspace = true
+gbuiltin-staking.workspace = true
+gbuiltin-proxy.workspace = true
+builtins-common = { workspace = true, features = ["bls12-381"] }
+gear-core.workspace = true
+gear-core-errors.workspace = true
+gear-runtime-interface.workspace = true
+frame-support.workspace = true
+frame-system.workspace = true
+frame-benchmarking = { workspace = true, optional = true }
+sp-crypto-ec-utils = { workspace = true, features = ["bls12-381"] }
+sp-std.workspace = true
+sp-runtime = { workspace = true, features = ["serde"] }
+pallet-gear.workspace = true
+pallet-staking.workspace = true
+pallet-proxy.workspace = true
+gear-workspace-hack.workspace = true
+
+[dev-dependencies]
+demo-waiting-proxy.workspace = true
+demo-staking-broker.workspace = true
+demo-proxy-broker.workspace = true
+gprimitives.workspace = true
+sp-core = { workspace = true, features = ["std"] }
+sp-externalities = { workspace = true, features = ["std"] }
+sp-io = { workspace = true, features = ["std"] }
+sp-staking = { workspace = true, features = ["std"] }
+frame-election-provider-support = { workspace = true, features = ["std"] }
+pallet-authorship = { workspace = true, features = ["std"] }
+pallet-balances = { workspace = true, features = ["std"] }
+pallet-session = { workspace = true, features = ["std"] }
+pallet-timestamp = { workspace = true, features = ["std"] }
+pallet-gear-bank = { workspace = true, features = ["std"] }
+pallet-gear-gas = { workspace = true, features = ["std"] }
+pallet-gear-messenger = { workspace = true, features = ["std"] }
+pallet-gear-program = { workspace = true, features = ["std"] }
+pallet-gear-scheduler = { workspace = true, features = ["std"] }
+frame-support-test = { workspace = true, features = ["std"] }
+tracing-subscriber.workspace = true
+hex-literal.workspace = true
+sha2 = { workspace = true, features = ["std"] }
+
+[features]
+default = ["std"]
+std = [
+	"common/std",
+	"builtins-common/bls12-381-std",
+	"frame-benchmarking?/std",
+	"frame-support/std",
+	"frame-system/std",
+	"gear-core/std",
+	"gear-runtime-interface/std",
+	"pallet-gear/std",
+	"pallet-staking/std",
+	"pallet-proxy/std",
+	"parity-scale-codec/std",
+	"scale-info/std",
+	"sp-crypto-ec-utils/std",
+	"sp-runtime/std",
+	"sp-std/std",
+	"ark-std/std",
+	# To be removed after migrations applied.
+	"pallet-balances/std",
+	"gprimitives/std",
+]
+runtime-benchmarks = [
+	"common/runtime-benchmarks",
+	"frame-benchmarking/runtime-benchmarks",
+	"frame-support/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+	"pallet-staking/runtime-benchmarks",
+	"ark-std",
+	# To be removed after migrations applied.
+	"pallet-balances/runtime-benchmarks",
+]
+try-runtime = [
+	"frame-support/try-runtime",
+	# To be removed after migrations applied.
+	"pallet-balances/try-runtime",
+]

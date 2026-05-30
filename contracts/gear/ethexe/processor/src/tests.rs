@@ -1,0 +1,2167 @@
+// Copyright (C) Gear Technologies Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
+
+use crate::*;
+use anyhow::{Result, anyhow};
+use ethexe_common::{
+    DEFAULT_BLOCK_GAS_LIMIT, OUTGOING_MESSAGES_SOFT_LIMIT, PROGRAM_MODIFICATIONS_SOFT_LIMIT,
+    PrivateKey, ScheduledTask, SignedMessage,
+    db::*,
+    events::{
+        BlockRequestEvent, MirrorRequestEvent, RouterRequestEvent,
+        mirror::{ExecutableBalanceTopUpRequestedEvent, MessageQueueingRequestedEvent},
+        router::ProgramCreatedEvent,
+    },
+    mock::*,
+};
+use ethexe_runtime_common::{RUNTIME_ID, WAIT_UP_TO_SAFE_DURATION, state::MessageQueue};
+use gear_core::{
+    ids::prelude::CodeIdExt,
+    message::{ErrorReplyReason, ReplyCode, SuccessReplyReason},
+};
+use gear_core_errors::SimpleExecutionError;
+use gprimitives::{ActorId, MessageId};
+use parity_scale_codec::Encode;
+use tokio::sync::mpsc;
+use utils::*;
+
+mod utils {
+    use super::*;
+
+    pub const VALID_PROGRAM: &str = r#"
+        (module
+        (import "env" "memory" (memory 1))
+        (import "env" "gr_reply" (func $reply (param i32 i32 i32 i32)))
+        (export "init" (func $init))
+        (func $init
+            (call $reply (i32.const 0) (i32.const 32) (i32.const 222) (i32.const 333))
+        )
+    )"#;
+
+    pub const INVALID_PROGRAM: &str = r#"
+        (module
+        (import "env" "world" (func $world))
+        (export "hello" (func $hello))
+        (func $hello
+            (call $world)
+        )
+    )"#;
+
+    pub fn init_logger() {
+        let _ = tracing_subscriber::fmt::try_init();
+    }
+
+    pub fn wat_to_wasm(wat: &str) -> (CodeId, Vec<u8>) {
+        let code = wat::parse_str(wat).expect("failed to parse wat to bin");
+        let code_id = CodeId::generate(&code);
+
+        (code_id, code)
+    }
+
+    pub async fn upload_code(processor: &mut Processor, code: &[u8]) -> CodeId {
+        let code_id = CodeId::generate(code);
+
+        let ValidCodeInfo {
+            code,
+            instrumented_code,
+            code_metadata,
+        } = processor
+            .process_code(CodeAndIdUnchecked {
+                code: code.to_vec(),
+                code_id,
+            })
+            .await
+            .expect("failed to process code")
+            .valid
+            .expect("code is invalid");
+
+        let db = &processor.db;
+        db.set_original_code(&code);
+        db.set_instrumented_code(RUNTIME_ID, code_id, instrumented_code);
+        db.set_code_metadata(code_id, code_metadata);
+        db.set_code_valid(code_id, true);
+
+        code_id
+    }
+
+    pub async fn setup_test_env_and_load_codes<const N: usize>(
+        codes: [&[u8]; N],
+    ) -> (Processor, BlockChain, [CodeId; N]) {
+        let db = Database::memory();
+        let mut processor = Processor::new(db.clone()).unwrap();
+        let chain = BlockChain::mock(20).setup(&db);
+
+        let mut code_ids = Vec::new();
+        for code in codes {
+            code_ids.push(upload_code(&mut processor, code).await);
+        }
+
+        (processor, chain, code_ids.try_into().unwrap())
+    }
+
+    pub fn setup_handler(db: Database, height: u32) -> ProcessingHandler {
+        let transitions = InBlockTransitions::new(height, Default::default(), Default::default());
+
+        ProcessingHandler::new(db, transitions)
+    }
+
+    pub fn injected(
+        destination: ActorId,
+        payload: impl AsRef<[u8]>,
+        value: u128,
+    ) -> InjectedTransaction {
+        InjectedTransaction {
+            destination,
+            payload: payload.as_ref().to_vec().try_into().unwrap(),
+            value,
+            reference_block: H256::random(),
+            salt: H256::random().0.to_vec().try_into().unwrap(),
+        }
+    }
+
+    pub async fn simple_init_test(code: impl AsRef<[u8]>) -> InBlockTransitions {
+        let (mut processor, chain, [code_id]) =
+            setup_test_env_and_load_codes([code.as_ref()]).await;
+        let block1 = chain.blocks[1].to_simple();
+
+        let mut handler = setup_handler(processor.db.clone(), block1.header.height);
+        let actor_id = ActorId::from(0x10000);
+        handler
+            .handle_router_event(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+                actor_id,
+                code_id,
+            }))
+            .expect("failed to create new program");
+        handler
+            .handle_mirror_event(
+                actor_id,
+                MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                    ExecutableBalanceTopUpRequestedEvent {
+                        value: 350_000_000_000,
+                    },
+                ),
+            )
+            .expect("failed to top up balance");
+        handler
+            .handle_mirror_event(
+                actor_id,
+                MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                    id: MessageId::from(1),
+                    source: ActorId::from(10),
+                    payload: vec![],
+                    value: 0,
+                    call_reply: false,
+                }),
+            )
+            .expect("failed to queue message");
+
+        processor
+            .process_queues(
+                handler.transitions,
+                block1.header.height,
+                block1.header.timestamp,
+                DEFAULT_BLOCK_GAS_LIMIT,
+                None,
+            )
+            .await
+            .unwrap()
+    }
+}
+
+#[tokio::test]
+async fn ping_init() {
+    init_logger();
+
+    let (mut processor, chain, [code_id]) =
+        setup_test_env_and_load_codes([demo_ping::WASM_BINARY]).await;
+
+    // Empty processing for block1
+    let block1 = chain.blocks[1].to_simple();
+    let executable = ExecutableData {
+        height: block1.header.height,
+        timestamp: block1.header.timestamp,
+        ..Default::default()
+    };
+    let FinalizedBlockTransitions {
+        states,
+        schedule,
+        program_creations,
+        ..
+    } = processor.process_programs(executable, None).await.unwrap();
+    program_creations
+        .into_iter()
+        .for_each(|(pid, cid)| processor.db.set_program_code_id(pid, cid));
+
+    let actor_id = ActorId::from(42);
+
+    let create_program_events = vec![
+        BlockRequestEvent::Router(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+            actor_id,
+            code_id,
+        })),
+        BlockRequestEvent::Mirror {
+            actor_id,
+            event: MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                ExecutableBalanceTopUpRequestedEvent {
+                    value: 10_000_000_000,
+                },
+            ),
+        },
+        BlockRequestEvent::Mirror {
+            actor_id,
+            event: MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: H256::random().0.into(),
+                source: H256::random().0.into(),
+                payload: b"PING".to_vec(),
+                value: 0,
+                call_reply: false,
+            }),
+        },
+    ];
+
+    // Process for block2
+    let block2 = chain.blocks[2].to_simple();
+    let executable = ExecutableData {
+        height: block2.header.height,
+        timestamp: block2.header.timestamp,
+        program_states: states,
+        schedule,
+        events: create_program_events,
+        ..Default::default()
+    };
+    let FinalizedBlockTransitions {
+        states,
+        schedule,
+        program_creations,
+        ..
+    } = processor
+        .process_programs(executable, None)
+        .await
+        .expect("failed to process create program");
+    program_creations
+        .into_iter()
+        .for_each(|(pid, cid)| processor.db.set_program_code_id(pid, cid));
+
+    let send_message_event = BlockRequestEvent::Mirror {
+        actor_id,
+        event: MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+            id: H256::random().0.into(),
+            source: H256::random().0.into(),
+            payload: b"PING".to_vec(),
+            value: 0,
+            call_reply: false,
+        }),
+    };
+
+    // Process for block3
+    let block3 = chain.blocks[3].to_simple();
+    let executable = ExecutableData {
+        height: block3.header.height,
+        timestamp: block3.header.timestamp,
+        program_states: states,
+        schedule,
+        events: vec![send_message_event],
+        ..Default::default()
+    };
+    processor
+        .process_programs(executable, None)
+        .await
+        .expect("failed to process send message");
+}
+
+#[tokio::test]
+async fn handle_new_code_valid() {
+    init_logger();
+
+    let mut processor = Processor::new(Database::memory()).expect("failed to create processor");
+
+    let (code_id, code) = utils::wat_to_wasm(utils::VALID_PROGRAM);
+
+    let (calculated_id, info) = processor
+        .process_code(CodeAndIdUnchecked {
+            code: code.clone(),
+            code_id,
+        })
+        .await
+        .map(|res| (res.code_id, res.valid.expect("code must be valid")))
+        .unwrap();
+
+    assert_eq!(calculated_id, code_id);
+
+    assert!(info.instrumented_code.bytes().len() > info.code.len());
+    assert_eq!(info.code, code);
+    assert_eq!(
+        info.code_metadata.original_code_len(),
+        info.code.len() as u32,
+    );
+}
+
+#[tokio::test]
+async fn handle_new_code_invalid() {
+    init_logger();
+
+    let mut processor = Processor::new(Database::memory()).expect("failed to create processor");
+
+    let (code_id, code) = utils::wat_to_wasm(utils::INVALID_PROGRAM);
+
+    assert!(
+        processor
+            .process_code(CodeAndIdUnchecked { code, code_id })
+            .await
+            .expect("failed to call runtime api")
+            .valid
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn process_programs_instruments_valid_code_missing_current_runtime_instrumentation() {
+    init_logger();
+
+    let db = Database::memory();
+    let mut processor = Processor::new(db.clone()).expect("failed to create processor");
+    let chain = BlockChain::mock(2).setup(&db);
+    let block1 = chain.blocks[1].to_simple();
+
+    let (code_id, code) = utils::wat_to_wasm(utils::VALID_PROGRAM);
+    assert_eq!(db.set_original_code(&code), code_id);
+    db.set_code_valid(code_id, true);
+    assert!(db.instrumented_code(RUNTIME_ID, code_id).is_none());
+
+    let actor_id = ActorId::from(0x10000);
+    let mut handler = setup_handler(db.clone(), block1.header.height);
+    handler
+        .handle_router_event(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+            actor_id,
+            code_id,
+        }))
+        .expect("failed to create new program");
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                ExecutableBalanceTopUpRequestedEvent {
+                    value: 350_000_000_000,
+                },
+            ),
+        )
+        .expect("failed to top up balance");
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: MessageId::from(1),
+                source: ActorId::from(10),
+                payload: vec![],
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to queue message");
+
+    processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            None,
+        )
+        .await
+        .expect("failed to process queues");
+
+    assert!(db.instrumented_code(RUNTIME_ID, code_id).is_some());
+    assert!(db.code_metadata(code_id).is_some());
+}
+
+#[tokio::test]
+async fn ping_pong() {
+    init_logger();
+
+    let (mut processor, chain, [code_id, ..]) =
+        setup_test_env_and_load_codes([demo_ping::WASM_BINARY, demo_async::WASM_BINARY]).await;
+    let block1 = chain.blocks[1].to_simple();
+
+    let user_id = ActorId::from(10);
+    let actor_id = ActorId::from(0x10000);
+
+    let mut handler = setup_handler(processor.db.clone(), block1.header.height);
+
+    handler
+        .handle_router_event(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+            actor_id,
+            code_id,
+        }))
+        .expect("failed to create new program");
+
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                ExecutableBalanceTopUpRequestedEvent {
+                    value: 150_000_000_000,
+                },
+            ),
+        )
+        .expect("failed to top up balance");
+
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: MessageId::from(1),
+                source: user_id,
+                payload: b"PING".to_vec(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: MessageId::from(2),
+                source: user_id,
+                payload: b"PING".to_vec(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+
+    let to_users = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            None,
+        )
+        .await
+        .unwrap()
+        .current_messages();
+
+    assert_eq!(to_users.len(), 2);
+
+    let message = &to_users[0].1;
+    assert_eq!(message.destination, user_id);
+    assert_eq!(message.payload, b"PONG");
+
+    let message = &to_users[1].1;
+    assert_eq!(message.destination, user_id);
+    assert_eq!(message.payload, b"PONG");
+}
+
+#[tokio::test]
+async fn async_and_ping() {
+    init_logger();
+
+    let mut message_nonce: u64 = 0;
+    let mut get_next_message_id = || {
+        message_nonce += 1;
+        MessageId::from(message_nonce)
+    };
+
+    let (mut processor, chain, [ping_code_id, upload_code_id, ..]) =
+        setup_test_env_and_load_codes([demo_ping::WASM_BINARY, demo_async::WASM_BINARY]).await;
+    let block1 = chain.blocks[1].to_simple();
+
+    let mut handler = setup_handler(processor.db.clone(), block1.header.height);
+
+    let user_id = ActorId::from(10);
+    let ping_id = ActorId::from(0x10000000);
+    let async_id = ActorId::from(0x20000000);
+
+    handler
+        .handle_router_event(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+            actor_id: ping_id,
+            code_id: ping_code_id,
+        }))
+        .expect("failed to create new program");
+
+    handler
+        .handle_mirror_event(
+            ping_id,
+            MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                ExecutableBalanceTopUpRequestedEvent {
+                    value: 350_000_000_000,
+                },
+            ),
+        )
+        .expect("failed to top up balance");
+
+    handler
+        .handle_mirror_event(
+            ping_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: get_next_message_id(),
+                source: user_id,
+                payload: b"PING".to_vec(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+
+    handler
+        .handle_router_event(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+            actor_id: async_id,
+            code_id: upload_code_id,
+        }))
+        .expect("failed to create new program");
+
+    handler
+        .handle_mirror_event(
+            async_id,
+            MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                ExecutableBalanceTopUpRequestedEvent {
+                    value: 1_500_000_000_000,
+                },
+            ),
+        )
+        .expect("failed to top up balance");
+
+    handler
+        .handle_mirror_event(
+            async_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: get_next_message_id(),
+                source: user_id,
+                payload: ping_id.encode(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+
+    let wait_for_reply_to = get_next_message_id();
+
+    handler
+        .handle_mirror_event(
+            async_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: wait_for_reply_to,
+                source: user_id,
+                payload: demo_async::Command::Common.encode(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+
+    let transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            None,
+        )
+        .await
+        .unwrap();
+
+    let to_users = transitions.current_messages();
+
+    assert_eq!(to_users.len(), 3);
+
+    let message = &to_users[0].1;
+    assert_eq!(message.destination, user_id);
+    assert_eq!(message.payload, b"PONG");
+
+    let message = &to_users[1].1;
+    assert_eq!(message.destination, user_id);
+    assert_eq!(message.payload, b"");
+
+    let message = &to_users[2].1;
+    assert_eq!(message.destination, user_id);
+    assert_eq!(message.payload, wait_for_reply_to.into_bytes());
+}
+
+#[tokio::test]
+async fn many_waits() {
+    init_logger();
+
+    let blocks_to_wait = 10;
+    let wat = format!(
+        r#"
+        (module
+            (import "env" "memory" (memory 1))
+            (import "env" "gr_reply" (func $reply (param i32 i32 i32 i32)))
+            (import "env" "gr_wait_for" (func $wait_for (param i32)))
+            (export "handle" (func $handle))
+            (func $handle
+                (if
+                    (i32.eqz (i32.load (i32.const 0x200)))
+                    (then
+                        (i32.store (i32.const 0x200) (i32.const 1))
+                        (call $wait_for (i32.const {blocks_to_wait}))
+                    )
+                    (else
+                        (call $reply (i32.const 0) (i32.const 13) (i32.const 0x400) (i32.const 0x600))
+                    )
+                )
+            )
+            (data (i32.const 0) "Hello, world!")
+        )
+        "#
+    );
+
+    let (_, code) = wat_to_wasm(wat.as_str());
+
+    let (mut processor, chain, [code_id]) = setup_test_env_and_load_codes([code.as_slice()]).await;
+    let block1 = chain.blocks[1].to_simple();
+    let wake_block = chain.blocks[1 + blocks_to_wait].to_simple();
+
+    let mut handler = setup_handler(processor.db.clone(), block1.header.height);
+
+    let amount = OUTGOING_MESSAGES_SOFT_LIMIT.min(PROGRAM_MODIFICATIONS_SOFT_LIMIT);
+    for i in 0..amount {
+        let program_id = ActorId::from(i as u64);
+
+        handler
+            .handle_router_event(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+                actor_id: program_id,
+                code_id,
+            }))
+            .expect("failed to create new program");
+
+        handler
+            .handle_mirror_event(
+                program_id,
+                MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                    ExecutableBalanceTopUpRequestedEvent {
+                        value: 300_000_000_000,
+                    },
+                ),
+            )
+            .expect("failed to top up balance");
+
+        handler
+            .handle_mirror_event(
+                program_id,
+                MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                    id: H256::random().0.into(),
+                    source: H256::random().0.into(),
+                    payload: Default::default(),
+                    value: 0,
+                    call_reply: false,
+                }),
+            )
+            .expect("failed to send message");
+    }
+    // Hack: nullify modifications to avoid modifications limit.
+    handler.transitions.modifications_mut().clear();
+    handler.transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        handler.transitions.current_messages().len(),
+        amount as usize
+    );
+
+    // First handle messages: all going to wait for 10 blocks: no replies yet.
+    let known_programs = handler.transitions.known_programs();
+    for &pid in &known_programs {
+        handler
+            .handle_mirror_event(
+                pid,
+                MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                    id: H256::random().0.into(),
+                    source: H256::random().0.into(),
+                    payload: Default::default(),
+                    value: 0,
+                    call_reply: false,
+                }),
+            )
+            .expect("failed to send message");
+    }
+    // Hack: nullify modifications to avoid modifications limit.
+    handler.transitions.modifications_mut().clear();
+    handler.transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        handler.transitions.current_messages().len(),
+        0,
+        "No replies expected yet"
+    );
+
+    // Second handle messages: must reply with "Hello, world!" immediately.
+    for pid in known_programs {
+        handler
+            .handle_mirror_event(
+                pid,
+                MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                    id: H256::random().0.into(),
+                    source: H256::random().0.into(),
+                    payload: Default::default(),
+                    value: 0,
+                    call_reply: false,
+                }),
+            )
+            .expect("failed to send message");
+    }
+    // Hack: nullify modifications to avoid modifications limit.
+    handler.transitions.modifications_mut().clear();
+    handler.transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        handler.transitions.current_messages().len(),
+        amount as usize,
+        "All should reply immediately"
+    );
+    for (_pid, message) in handler.transitions.current_messages() {
+        assert_eq!(message.payload, b"Hello, world!");
+    }
+
+    // Check all messages wake up and reply with "Hello, world!" in wake block.
+    // Hack: change block height to wake up tasks.
+    let transitions = handler
+        .transitions
+        .tap_mut(|ts| *ts.block_height_mut() = wake_block.header.height);
+    let mut transitions = processor.process_tasks(transitions);
+    // Hack: nullify modifications to avoid modifications limit.
+    transitions.modifications_mut().clear();
+    let transitions = processor
+        .process_queues(
+            transitions,
+            wake_block.header.height,
+            wake_block.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(transitions.current_messages().len(), amount as usize);
+    for (_pid, message) in transitions.current_messages() {
+        assert_eq!(message.payload, b"Hello, world!");
+    }
+}
+
+/// `process_tasks` at height H must drain every scheduled height ≤ H, so a
+/// `wait_for` task scheduled at H still fires when the wake block sits past H.
+#[tokio::test]
+async fn cross_height_wake_drain() {
+    init_logger();
+
+    let blocks_to_wait = 10;
+    let extra_skip = 5;
+    let wat = format!(
+        r#"
+        (module
+            (import "env" "memory" (memory 1))
+            (import "env" "gr_reply" (func $reply (param i32 i32 i32 i32)))
+            (import "env" "gr_wait_for" (func $wait_for (param i32)))
+            (export "handle" (func $handle))
+            (func $handle
+                (if
+                    (i32.eqz (i32.load (i32.const 0x200)))
+                    (then
+                        (i32.store (i32.const 0x200) (i32.const 1))
+                        (call $wait_for (i32.const {blocks_to_wait}))
+                    )
+                    (else
+                        (call $reply (i32.const 0) (i32.const 13) (i32.const 0x400) (i32.const 0x600))
+                    )
+                )
+            )
+            (data (i32.const 0) "Hello, world!")
+        )
+        "#
+    );
+
+    let (_, code) = wat_to_wasm(wat.as_str());
+
+    let (mut processor, chain, [code_id]) = setup_test_env_and_load_codes([code.as_slice()]).await;
+    let block1 = chain.blocks[1].to_simple();
+    let wake_block = chain.blocks[1 + blocks_to_wait + extra_skip].to_simple();
+    let scheduled_wake_height = block1.header.height + blocks_to_wait as u32;
+    assert!(
+        wake_block.header.height > scheduled_wake_height,
+        "test setup: wake_block must be past scheduled wake height"
+    );
+
+    let mut handler = setup_handler(processor.db.clone(), block1.header.height);
+
+    let amount = OUTGOING_MESSAGES_SOFT_LIMIT.min(PROGRAM_MODIFICATIONS_SOFT_LIMIT);
+    for i in 0..amount {
+        let program_id = ActorId::from(i as u64);
+
+        handler
+            .handle_router_event(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+                actor_id: program_id,
+                code_id,
+            }))
+            .expect("failed to create new program");
+
+        handler
+            .handle_mirror_event(
+                program_id,
+                MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                    ExecutableBalanceTopUpRequestedEvent {
+                        value: 300_000_000_000,
+                    },
+                ),
+            )
+            .expect("failed to top up balance");
+
+        handler
+            .handle_mirror_event(
+                program_id,
+                MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                    id: H256::random().0.into(),
+                    source: H256::random().0.into(),
+                    payload: Default::default(),
+                    value: 0,
+                    call_reply: false,
+                }),
+            )
+            .expect("failed to send message");
+    }
+    handler.transitions.modifications_mut().clear();
+    handler.transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        handler.transitions.current_messages().len(),
+        amount as usize
+    );
+
+    // Second handle batch — all 64 dispatches enter `wait_for`, no replies.
+    let known_programs = handler.transitions.known_programs();
+    for &pid in &known_programs {
+        handler
+            .handle_mirror_event(
+                pid,
+                MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                    id: H256::random().0.into(),
+                    source: H256::random().0.into(),
+                    payload: Default::default(),
+                    value: 0,
+                    call_reply: false,
+                }),
+            )
+            .expect("failed to send message");
+    }
+    handler.transitions.modifications_mut().clear();
+    handler.transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        handler.transitions.current_messages().len(),
+        0,
+        "wait_for path must not produce replies"
+    );
+
+    // Jump past the scheduled wake height (block1 + blocks_to_wait + 5):
+    // `process_tasks` must still drain the wakes despite the height gap.
+    let transitions = handler
+        .transitions
+        .tap_mut(|ts| *ts.block_height_mut() = wake_block.header.height);
+    let mut transitions = processor.process_tasks(transitions);
+    transitions.modifications_mut().clear();
+    let transitions = processor
+        .process_queues(
+            transitions,
+            wake_block.header.height,
+            wake_block.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            None,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        transitions.current_messages().len(),
+        amount as usize,
+        "every waited dispatch must be woken even though wake_block is past the scheduled height"
+    );
+    for (_pid, message) in transitions.current_messages() {
+        assert_eq!(message.payload, b"Hello, world!");
+    }
+}
+
+// Tests that when overlay execution is performed, it doesn't change the original state.
+#[tokio::test]
+async fn overlay_execution() {
+    init_logger();
+
+    // Define message id generator.
+    let mut message_nonce: u64 = 0;
+    let mut get_next_message_id = || {
+        message_nonce += 1;
+        MessageId::from(message_nonce)
+    };
+
+    // Define function to get message queue from state hash.
+    let get_mq_from_state_hash =
+        |state_hash: H256, processor: &Processor| -> Result<MessageQueue> {
+            let state = processor
+                .db
+                .program_state(state_hash)
+                .ok_or(anyhow!("failed to read pid state"))?;
+
+            state.canonical_queue.query(&processor.db)
+        };
+
+    let (mut processor, chain, [ping_code_id, async_code_id]) =
+        setup_test_env_and_load_codes([demo_ping::WASM_BINARY, demo_async::WASM_BINARY]).await;
+    let block1 = chain.blocks[1].to_simple();
+
+    // -----------------------------------------------------------------------------
+    // --------------------------- Create programs ---------------------------------
+    // -----------------------------------------------------------------------------
+    let user_id = ActorId::from(10);
+    let ping_id = ActorId::from(0x10000000);
+    let async_id = ActorId::from(0x20000000);
+
+    let events = vec![
+        // Create ping program, top up balance and send init message.
+        BlockRequestEvent::Router(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+            actor_id: ping_id,
+            code_id: ping_code_id,
+        })),
+        BlockRequestEvent::Mirror {
+            actor_id: ping_id,
+            event: MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                ExecutableBalanceTopUpRequestedEvent {
+                    value: 400_000_000_000,
+                },
+            ),
+        },
+        BlockRequestEvent::Mirror {
+            actor_id: ping_id,
+            event: MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: get_next_message_id(),
+                source: user_id,
+                payload: b"PING".to_vec(),
+                value: 0,
+                call_reply: false,
+            }),
+        },
+        // Create async program, top up balance and send init message.
+        BlockRequestEvent::Router(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+            actor_id: async_id,
+            code_id: async_code_id,
+        })),
+        BlockRequestEvent::Mirror {
+            actor_id: async_id,
+            event: MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                ExecutableBalanceTopUpRequestedEvent {
+                    value: 1_500_000_000_000,
+                },
+            ),
+        },
+        BlockRequestEvent::Mirror {
+            actor_id: async_id,
+            event: MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: get_next_message_id(),
+                source: user_id,
+                payload: ping_id.encode(),
+                value: 0,
+                call_reply: false,
+            }),
+        },
+    ];
+
+    let executable_data = ExecutableData {
+        height: block1.header.height,
+        timestamp: block1.header.timestamp,
+        events,
+        gas_allowance: Some(DEFAULT_BLOCK_GAS_LIMIT),
+        ..Default::default()
+    };
+
+    // Process events
+    let FinalizedBlockTransitions {
+        states,
+        schedule,
+        program_creations,
+        ..
+    } = processor
+        .process_programs(executable_data, None)
+        .await
+        .expect("failed to process events");
+    program_creations.into_iter().for_each(|(pid, cid)| {
+        processor.db.set_program_code_id(pid, cid);
+    });
+
+    // Check that program have empty queues
+    let ping_mq = states.get(&ping_id).expect("ping state wasn't found");
+    let async_mq = states.get(&async_id).expect("async state wasn't found");
+    assert_eq!(ping_mq.canonical_queue_size, 0);
+    assert_eq!(async_mq.canonical_queue_size, 0);
+    assert_eq!(ping_mq.injected_queue_size, 0);
+    assert_eq!(async_mq.injected_queue_size, 0);
+
+    // -----------------------------------------------------------------------------
+    // ------------------ Create a block with non-empty queues ---------------------
+    // -----------------------------------------------------------------------------
+    // This block won't be processed, but there will be messages saved into corresponding queues.
+    // This is needed to test a case when RPC calculate reply for handle procedure is called when
+    // programs already have some state.
+
+    let block2 = chain.blocks[2].to_simple();
+    let mut handler = ProcessingHandler::new(
+        processor.db.clone(),
+        InBlockTransitions::new(block2.header.height, states, schedule),
+    );
+
+    // Manually add messages to programs queues
+    let ping_mid1 = get_next_message_id();
+    handler
+        .handle_mirror_event(
+            ping_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: ping_mid1,
+                source: user_id,
+                payload: b"PING".to_vec(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+
+    let ping_mid2 = get_next_message_id();
+    handler
+        .handle_mirror_event(
+            ping_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: ping_mid2,
+                source: user_id,
+                payload: b"PING".to_vec(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+
+    let async_mid1 = get_next_message_id();
+    handler
+        .handle_mirror_event(
+            async_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: async_mid1,
+                source: user_id,
+                payload: demo_async::Command::Common.encode().encode(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+
+    let async_mid2 = get_next_message_id();
+    handler
+        .handle_mirror_event(
+            async_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: async_mid2,
+                source: user_id,
+                payload: demo_async::Command::Common.encode().encode(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+
+    let async_mid3 = get_next_message_id();
+    handler
+        .handle_mirror_event(
+            async_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: async_mid3,
+                source: user_id,
+                payload: demo_async::Command::Common.encode().encode(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+
+    // Handler ops wrote to the storage states of particular programs,
+    // but block programs states are not updated yet. That the reason state hash
+    // can't be obtained from the db.
+    let ping_state_hash = handler
+        .transitions
+        .state_of(&ping_id)
+        .expect("failed to get ping state");
+    let ping_mq = get_mq_from_state_hash(ping_state_hash.hash, &processor)
+        .expect("failed to get ping message queue");
+    assert_eq!(ping_mq.len(), 2);
+
+    let async_state_hash = handler
+        .transitions
+        .state_of(&async_id)
+        .expect("failed to get async state");
+    let async_mq = get_mq_from_state_hash(async_state_hash.hash, &processor)
+        .expect("failed to get async message queue");
+    assert_eq!(async_mq.len(), 3);
+
+    // Finalize (from the ethexe-processor point of view) the block
+    let FinalizedBlockTransitions { states, .. } = handler.transitions.finalize();
+
+    // Same checks as above, but with obtaining states from db
+    let ping_mq = states.get(&ping_id).expect("ping state wasn't found");
+    let async_mq = states.get(&async_id).expect("async state wasn't found");
+    assert_eq!(ping_mq.canonical_queue_size, 2);
+    assert_eq!(async_mq.canonical_queue_size, 3);
+    assert_eq!(ping_mq.injected_queue_size, 0);
+    assert_eq!(async_mq.injected_queue_size, 0);
+
+    // -----------------------------------------------------------------------------
+    // ------------------------ Run in overlay a message ---------------------------
+    // -----------------------------------------------------------------------------
+    let block3 = chain.blocks[3].to_simple();
+
+    // Send message using overlay on the block3.
+    let mut overlaid_processor = processor.clone().overlaid();
+    let executable = ExecutableDataForReply {
+        height: block3.header.height,
+        timestamp: block3.header.timestamp,
+        program_states: states,
+        source: user_id,
+        program_id: async_id,
+        payload: demo_async::Command::Common.encode(),
+        value: 0,
+        gas_allowance: DEFAULT_BLOCK_GAS_LIMIT,
+    };
+    let reply_result = overlaid_processor
+        .execute_for_reply(executable)
+        .await
+        .unwrap();
+    assert_eq!(reply_result.reply.payload, MessageId::zero().encode());
+    assert!(reply_result.messages.is_empty());
+}
+
+#[tokio::test]
+async fn overlay_execution_returns_messages_sent_to_users() {
+    init_logger();
+
+    let wat = r#"
+        (module
+            (import "env" "memory" (memory 1))
+            (import "env" "gr_source" (func $gr_source (param i32)))
+            (import "env" "gr_send" (func $gr_send (param i32 i32 i32 i32 i32)))
+            (import "env" "gr_reply" (func $gr_reply (param i32 i32 i32 i32)))
+            (export "init" (func $init))
+            (export "handle" (func $handle))
+            (data (i32.const 48) "USER")
+            (data (i32.const 64) "OK")
+            (func $init)
+            (func $handle
+                (call $gr_source (i32.const 0))
+                (call $gr_send (i32.const 0) (i32.const 48) (i32.const 4) (i32.const 0) (i32.const 96))
+                (call $gr_reply (i32.const 64) (i32.const 2) (i32.const 32) (i32.const 96))
+            )
+        )
+    "#;
+    let wasm = wat::parse_str(wat).expect("failed to parse WAT module");
+
+    let (mut processor, chain, [code_id]) = setup_test_env_and_load_codes([wasm.as_slice()]).await;
+    let block1 = chain.blocks[1].to_simple();
+    let user_id = ActorId::from(10);
+    let actor_id = ActorId::from(0x10000);
+
+    let mut handler = setup_handler(processor.db.clone(), block1.header.height);
+    handler
+        .handle_router_event(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+            actor_id,
+            code_id,
+        }))
+        .expect("failed to create new program");
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                ExecutableBalanceTopUpRequestedEvent {
+                    value: 350_000_000_000,
+                },
+            ),
+        )
+        .expect("failed to top up balance");
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: MessageId::from(1),
+                source: user_id,
+                payload: vec![],
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to queue init");
+
+    let transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            None,
+        )
+        .await
+        .expect("failed to initialize program");
+    processor.db.set_program_code_id(actor_id, code_id);
+    let FinalizedBlockTransitions { states, .. } = transitions.finalize();
+
+    let block2 = chain.blocks[2].to_simple();
+    let mut overlaid_processor = processor.clone().overlaid();
+    let reply_result = overlaid_processor
+        .execute_for_reply(ExecutableDataForReply {
+            height: block2.header.height,
+            timestamp: block2.header.timestamp,
+            program_states: states,
+            source: user_id,
+            program_id: actor_id,
+            payload: b"PING".to_vec(),
+            value: 0,
+            gas_allowance: DEFAULT_BLOCK_GAS_LIMIT,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(reply_result.reply.payload, b"OK");
+    assert_eq!(reply_result.messages.len(), 1);
+
+    let message = &reply_result.messages[0];
+    assert_eq!(message.destination, user_id);
+    assert_eq!(message.payload, b"USER");
+    assert!(message.reply_details.is_none());
+}
+
+#[tokio::test]
+async fn injected_ping_pong() {
+    init_logger();
+
+    let (promise_sender, mut promise_receiver) = mpsc::unbounded_channel();
+    let promise_sink = BoundPromiseSink::new(promise_sender, H256::zero());
+    let (mut processor, chain, [code_id]) =
+        setup_test_env_and_load_codes([demo_ping::WASM_BINARY]).await;
+    let block1 = chain.blocks[1].to_simple();
+
+    let user_1 = ActorId::from(10);
+    let user_2 = ActorId::from(20);
+    let actor_id = ActorId::from(0x10000);
+
+    let mut handler = setup_handler(processor.db.clone(), block1.header.height);
+
+    handler
+        .handle_router_event(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+            actor_id,
+            code_id,
+        }))
+        .expect("failed to create new program");
+
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                ExecutableBalanceTopUpRequestedEvent {
+                    value: 200_000_000_000,
+                },
+            ),
+        )
+        .expect("failed to top up balance");
+
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: MessageId::from(1),
+                source: user_1,
+                payload: b"INIT".to_vec(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+
+    handler.transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            None,
+        )
+        .await
+        .unwrap();
+
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: MessageId::from(2),
+                source: user_1,
+                payload: b"PING".to_vec(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+
+    let injected_tx = injected(actor_id, b"PING", 0);
+    handler
+        .handle_injected_transaction(user_2, injected_tx.clone())
+        .expect("failed to send message");
+
+    handler.transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            Some(promise_sink.clone()),
+        )
+        .await
+        .unwrap();
+
+    let promise = promise_receiver
+        .recv()
+        .await
+        .expect("promise must be sent after processing")
+        .1;
+
+    assert_eq!(promise.tx_hash, injected_tx.to_hash());
+    assert_eq!(promise.reply.payload, b"PONG");
+    assert_eq!(promise.reply.value, 0);
+    assert_eq!(
+        promise.reply.code,
+        ReplyCode::Success(SuccessReplyReason::Manual)
+    );
+
+    let to_users = handler.transitions.current_messages();
+
+    assert_eq!(to_users.len(), 3);
+    let message = &to_users[0].1;
+    assert_eq!(message.destination, user_1);
+    assert_eq!(message.payload, b"");
+
+    let message = &to_users[1].1;
+    assert_eq!(message.destination, user_2);
+    assert_eq!(message.payload, b"PONG");
+
+    let message = &to_users[2].1;
+    assert_eq!(message.destination, user_1);
+    assert_eq!(message.payload, b"PONG");
+}
+
+#[cfg(debug_assertions)] // FIXME: test fails in release mode
+#[tokio::test]
+async fn injected_prioritized_over_canonical() {
+    const MSG_NUM: usize = 100;
+
+    init_logger();
+
+    let (promise_sender, mut promise_receiver) = mpsc::unbounded_channel();
+    let promise_sink = BoundPromiseSink::new(promise_sender, H256::zero());
+
+    let (mut processor, chain, [code_id]) =
+        setup_test_env_and_load_codes([demo_ping::WASM_BINARY]).await;
+    let block1 = chain.blocks[1].to_simple();
+
+    let canonical_user = ActorId::from(10);
+    let injected_user = ActorId::from(20);
+    let actor_id = ActorId::from(0x10000);
+
+    let mut handler = setup_handler(processor.db.clone(), block1.header.height);
+
+    handler
+        .handle_router_event(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+            actor_id,
+            code_id,
+        }))
+        .expect("failed to create new program");
+
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                ExecutableBalanceTopUpRequestedEvent {
+                    value: 500_000_000_000_000,
+                },
+            ),
+        )
+        .expect("failed to top up balance");
+
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: H256::random().0.into(),
+                source: canonical_user,
+                payload: b"INIT".to_vec(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+
+    handler.transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            None,
+        )
+        .await
+        .unwrap();
+
+    // Send canonical messages
+    for _ in 0..MSG_NUM {
+        handler
+            .handle_mirror_event(
+                actor_id,
+                MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                    id: H256::random().0.into(),
+                    source: canonical_user,
+                    payload: b"PING".to_vec(),
+                    value: 0,
+                    call_reply: false,
+                }),
+            )
+            .expect("failed to send message");
+    }
+
+    // Send injected messages
+    let mut tx_hashes = vec![];
+    for _ in 0..MSG_NUM {
+        let tx = injected(actor_id, b"PING", 0);
+        tx_hashes.push(tx.to_hash());
+        handler
+            .handle_injected_transaction(injected_user, tx)
+            .expect("failed to send message");
+    }
+
+    let transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            Some(promise_sink.clone()),
+        )
+        .await
+        .unwrap();
+
+    for tx_hash in tx_hashes {
+        let promise = promise_receiver
+            .recv()
+            .await
+            .expect("promise for injected transaction")
+            .1;
+
+        assert_eq!(promise.tx_hash, tx_hash);
+        assert_eq!(promise.reply.value, 0);
+        assert_eq!(
+            promise.reply.code,
+            ReplyCode::Success(SuccessReplyReason::Manual)
+        );
+        assert_eq!(promise.reply.payload, b"PONG");
+    }
+
+    // Verify that injected messages were processed first
+    // skip the first message which is INIT reply
+    let mut is_canonical_found = false;
+    for (_, message) in transitions.current_messages().into_iter().skip(1) {
+        if message.destination == canonical_user {
+            is_canonical_found = true;
+        } else if is_canonical_found && message.destination == injected_user {
+            panic!("Canonical message processed before injected one");
+        }
+    }
+}
+
+#[tokio::test]
+async fn executable_balance_charged() {
+    init_logger();
+
+    let (mut processor, chain, [code_id]) =
+        setup_test_env_and_load_codes([demo_ping::WASM_BINARY]).await;
+    let block1 = chain.blocks[1].to_simple();
+    let mut handler = setup_handler(processor.db.clone(), block1.header.height);
+
+    let user_id = ActorId::from(10);
+    let actor_id = ActorId::from(0x10000);
+
+    handler
+        .handle_router_event(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+            actor_id,
+            code_id,
+        }))
+        .expect("failed to create new program");
+
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                ExecutableBalanceTopUpRequestedEvent {
+                    value: 80_000_000_000,
+                },
+            ),
+        )
+        .expect("failed to top up balance");
+
+    let exec_balance_before = handler.program_state(actor_id).executable_balance;
+    assert_eq!(exec_balance_before, 80_000_000_000);
+
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: MessageId::from(1),
+                source: user_id,
+                payload: b"PING".to_vec(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+
+    handler.transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            None,
+        )
+        .await
+        .unwrap();
+
+    let to_users = handler.transitions.current_messages();
+
+    assert_eq!(to_users.len(), 1);
+
+    let message = &to_users[0].1;
+    assert_eq!(message.destination, user_id);
+    assert_eq!(message.payload, b"PONG");
+
+    // Check that executable balance decreased
+    let exec_balance_after = handler.program_state(actor_id).executable_balance;
+    assert!(exec_balance_after < exec_balance_before);
+
+    handler
+        .handle_injected_transaction(user_id, injected(actor_id, b"", 0))
+        .expect("failed to send message");
+
+    let to_users = handler.transitions.current_messages();
+
+    assert_eq!(to_users.len(), 1);
+
+    let message = &to_users[0].1;
+    assert_eq!(message.destination, user_id);
+    assert_eq!(message.payload, b"PONG");
+
+    // Check that executable balance decreased on injected message as well
+    let exec_balance_after = handler.program_state(actor_id).executable_balance;
+    assert!(exec_balance_after < exec_balance_before);
+}
+
+#[tokio::test]
+async fn executable_balance_injected_panic_not_charged() {
+    // Testing special case when injected message causes panic in the program.
+    // In this case executable balance should not be charged if gas burned during
+    // panicked message execution is less than the threshold (see `INJECTED_MESSAGE_PANIC_GAS_CHARGE_THRESHOLD`).
+
+    const INITIAL_EXECUTABLE_BALANCE: u128 = 150_000_000_000;
+
+    init_logger();
+
+    let (promise_sender, mut promise_receiver) = mpsc::unbounded_channel();
+    let promise_sink = BoundPromiseSink::new(promise_sender, H256::zero());
+
+    let (mut processor, chain, [code_id]) =
+        setup_test_env_and_load_codes([demo_panic_payload::WASM_BINARY]).await;
+    let block1 = chain.blocks[1].to_simple();
+
+    let user_id = ActorId::from(10);
+    let actor_id = ActorId::from(0x10000);
+
+    let mut handler = setup_handler(processor.db.clone(), block1.header.height);
+
+    handler
+        .handle_router_event(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+            actor_id,
+            code_id,
+        }))
+        .expect("failed to create new program");
+
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                ExecutableBalanceTopUpRequestedEvent {
+                    value: INITIAL_EXECUTABLE_BALANCE,
+                },
+            ),
+        )
+        .expect("failed to top up balance");
+
+    let exec_balance_before = handler.program_state(actor_id).executable_balance;
+    assert_eq!(exec_balance_before, INITIAL_EXECUTABLE_BALANCE);
+
+    // Init message should not panic
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: H256::random().0.into(),
+                source: user_id,
+                payload: ActorId::zero().encode(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .unwrap();
+    handler.transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            Some(promise_sink.clone()),
+        )
+        .await
+        .unwrap();
+    let init_balance = handler.program_state(actor_id).executable_balance;
+
+    // We know for sure handling this message is cost less than the threshold.
+    // This message will cause panic in the program.
+    let panic_tx = injected(actor_id, b"", 0);
+    handler
+        .handle_injected_transaction(user_id, panic_tx.clone())
+        .unwrap();
+    handler.transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            Some(promise_sink.clone()),
+        )
+        .await
+        .unwrap();
+
+    // Promises still returns for panic injected txs.
+    let panic_promise = promise_receiver
+        .recv()
+        .await
+        .expect("promise for injected transaction")
+        .1;
+
+    assert_eq!(panic_promise.tx_hash, panic_tx.to_hash());
+    assert_eq!(panic_promise.reply.value, 0);
+    assert_eq!(
+        panic_promise.reply.code,
+        ReplyCode::Error(ErrorReplyReason::Execution(
+            SimpleExecutionError::UserspacePanic
+        ))
+    );
+    assert_eq!(panic_promise.reply.payload, b"\xE0\x80\x80");
+
+    let to_users = handler.transitions.current_messages();
+
+    // Only one message to user, because injected message panic and do not charge gas.
+    assert_eq!(to_users.len(), 1);
+
+    // Check that executable balance is unchanged
+    let exec_balance_after = handler.program_state(actor_id).executable_balance;
+    assert_eq!(exec_balance_after, init_balance);
+
+    // Send canonical message to make sure executable balance is charged in panic case.
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: MessageId::from(3),
+                source: user_id,
+                payload: vec![],
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+    let transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            Some(promise_sink.clone()),
+        )
+        .await
+        .unwrap();
+
+    let to_users = transitions.current_messages();
+    assert_eq!(to_users.len(), 2);
+
+    // Check that executable balance decreased on canonical message
+    let exec_balance_after = ProcessingHandler::new(processor.db.clone(), transitions)
+        .program_state(actor_id)
+        .executable_balance;
+    assert!(exec_balance_after < init_balance);
+}
+
+#[tokio::test]
+async fn insufficient_executable_balance_still_charged() {
+    // Just enough balance to charge for instrumentation and instantiation but not enough to process the message.
+    const INSUFFICIENT_EXECUTABLE_BALANCE: u128 = 30_000_000_000;
+
+    init_logger();
+
+    let (mut processor, chain, [code_id]) =
+        setup_test_env_and_load_codes([demo_ping::WASM_BINARY]).await;
+    let block1 = chain.blocks[1].to_simple();
+    let mut handler = setup_handler(processor.db.clone(), block1.header.height);
+
+    let user_id = ActorId::from(10);
+    let actor_id = ActorId::from(0x10000);
+
+    handler
+        .handle_router_event(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+            actor_id,
+            code_id,
+        }))
+        .expect("failed to create new program");
+
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                ExecutableBalanceTopUpRequestedEvent {
+                    value: INSUFFICIENT_EXECUTABLE_BALANCE,
+                },
+            ),
+        )
+        .expect("failed to top up balance");
+
+    // Should fail due to insufficient balance (ran out of gas)
+    handler
+        .handle_mirror_event(
+            actor_id,
+            MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: MessageId::from(1),
+                source: user_id,
+                payload: b"PING".to_vec(),
+                value: 0,
+                call_reply: false,
+            }),
+        )
+        .expect("failed to send message");
+
+    handler.transitions = processor
+        .process_queues(
+            handler.transitions,
+            block1.header.height,
+            block1.header.timestamp,
+            DEFAULT_BLOCK_GAS_LIMIT,
+            None,
+        )
+        .await
+        .unwrap();
+
+    let to_users = handler.transitions.current_messages();
+    assert_eq!(to_users.len(), 1);
+
+    // Check that message processing failed due to insufficient balance (ran out of gas)
+    let message = &to_users[0].1;
+    assert_eq!(message.destination, user_id);
+    assert!(message.reply_details.unwrap().to_reply_code().is_error());
+
+    // Check that executable balance decreased
+    let exec_balance_after = handler.program_state(actor_id).executable_balance;
+    assert!(exec_balance_after < INSUFFICIENT_EXECUTABLE_BALANCE);
+}
+
+#[tokio::test]
+async fn call_wake_with_delay_is_unsupported() {
+    init_logger();
+
+    let get_wat = |delay: u32| {
+        format!(
+            r#"
+            (module
+                (import "env" "memory" (memory 1))
+                (import "env" "gr_wake" (func $wake (param i32 i32 i32)))
+                (export "init" (func $init))
+                (func $init
+                    (call $wake (i32.const 0x0) (i32.const {delay}) (i32.const 0x0))
+                    (if (i32.eqz (i32.load (i32.const 0x0)))
+                        (then nop)
+                        (else unreachable)
+                    )
+                )
+            )
+            "#
+        )
+    };
+
+    // with delay != 0
+    let wat = get_wat(10);
+    let transitions = simple_init_test(wat_to_wasm(&wat).1).await;
+    let reply_code = transitions.current_messages()[0]
+        .1
+        .reply_details
+        .expect("must be reply")
+        .to_reply_code();
+    assert_eq!(
+        reply_code,
+        ReplyCode::Error(ErrorReplyReason::Execution(
+            SimpleExecutionError::UnreachableInstruction
+        )),
+        "Calling gr_wake with non-zero delay should lead to unreachable instruction"
+    );
+
+    // with delay == 0
+    let wat = get_wat(0);
+    let transitions = simple_init_test(wat_to_wasm(&wat).1).await;
+    let reply_code = transitions.current_messages()[0]
+        .1
+        .reply_details
+        .expect("must be reply")
+        .to_reply_code();
+    assert_eq!(reply_code, ReplyCode::Success(SuccessReplyReason::Auto));
+}
+
+/// Tests that process_programs phases execute in strict order:
+/// 1. Injected transactions + events (populate queues)
+/// 2. Scheduled tasks (e.g., WakeMessage moves dispatches back to queues)
+/// 3. Queue processing (injected queue first, then canonical queue)
+///
+/// Uses `process_programs` to exercise the full pipeline.
+#[tokio::test]
+async fn injected_and_events_then_tasks_then_queues() {
+    init_logger();
+
+    // Handle function:
+    // - First call: sets flag and waits for 1 block
+    // - Subsequent calls: replies with "DONE"
+    let wat = r#"
+        (module
+            (import "env" "memory" (memory 1))
+            (import "env" "gr_reply" (func $reply (param i32 i32 i32 i32)))
+            (import "env" "gr_wait_for" (func $wait_for (param i32)))
+            (export "handle" (func $handle))
+            (func $handle
+                (if
+                    (i32.eqz (i32.load (i32.const 0x200)))
+                    (then
+                        (i32.store (i32.const 0x200) (i32.const 1))
+                        (call $wait_for (i32.const 1))
+                    )
+                    (else
+                        (call $reply (i32.const 0) (i32.const 4) (i32.const 0x400) (i32.const 0x600))
+                    )
+                )
+            )
+            (data (i32.const 0) "DONE")
+        )
+    "#;
+
+    let (_, code) = wat_to_wasm(wat);
+    let (mut processor, chain, [code_id]) = setup_test_env_and_load_codes([code.as_slice()]).await;
+
+    let task_user = ActorId::from(10);
+    let injected_user_pk = PrivateKey::random();
+    let canonical_user = ActorId::from(30);
+    let actor_id = ActorId::from(0x10000);
+
+    // === Block 1: Create program, init, and send a message that will wait ===
+    let block1 = chain.blocks[1].to_simple();
+
+    let create_and_init_events = vec![
+        BlockRequestEvent::Router(RouterRequestEvent::ProgramCreated(ProgramCreatedEvent {
+            actor_id,
+            code_id,
+        })),
+        BlockRequestEvent::Mirror {
+            actor_id,
+            event: MirrorRequestEvent::ExecutableBalanceTopUpRequested(
+                ExecutableBalanceTopUpRequestedEvent {
+                    value: 500_000_000_000,
+                },
+            ),
+        },
+        BlockRequestEvent::Mirror {
+            actor_id,
+            event: MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+                id: MessageId::from(1),
+                source: task_user,
+                payload: vec![],
+                value: 0,
+                call_reply: false,
+            }),
+        },
+    ];
+
+    let executable = ExecutableData {
+        height: block1.header.height,
+        timestamp: block1.header.timestamp,
+        events: create_and_init_events,
+        gas_allowance: Some(DEFAULT_BLOCK_GAS_LIMIT),
+        ..Default::default()
+    };
+    let FinalizedBlockTransitions {
+        states,
+        schedule,
+        program_creations,
+        ..
+    } = processor.process_programs(executable, None).await.unwrap();
+    program_creations
+        .into_iter()
+        .for_each(|(pid, cid)| processor.db.set_program_code_id(pid, cid));
+
+    // === Block 2: Send handle message that triggers wait_for(1) ===
+    let block2 = chain.blocks[2].to_simple();
+
+    let wait_message_event = vec![BlockRequestEvent::Mirror {
+        actor_id,
+        event: MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+            id: MessageId::from(2),
+            source: task_user,
+            payload: vec![],
+            value: 0,
+            call_reply: false,
+        }),
+    }];
+
+    let executable = ExecutableData {
+        height: block2.header.height,
+        timestamp: block2.header.timestamp,
+        program_states: states,
+        schedule,
+        events: wait_message_event,
+        gas_allowance: Some(DEFAULT_BLOCK_GAS_LIMIT),
+        ..Default::default()
+    };
+    let FinalizedBlockTransitions {
+        states, schedule, ..
+    } = processor.process_programs(executable, None).await.unwrap();
+
+    // Verify WakeMessage is scheduled for block3
+    let wake_block_height = block2.header.height + 1;
+    assert!(
+        schedule.contains_key(&wake_block_height),
+        "WakeMessage must be scheduled for block {wake_block_height}"
+    );
+
+    // === Block 3: All three phases via process_programs ===
+    // - Phase 1 (injected + events): injected tx + canonical message populate queues
+    // - Phase 2 (tasks): WakeMessage moves waiting dispatch back to canonical queue
+    // - Phase 3 (queues): injected queue first, then canonical queue
+    let block3 = chain.blocks[3].to_simple();
+    assert_eq!(block3.header.height, wake_block_height);
+
+    let injected_tx = InjectedTransaction {
+        destination: actor_id,
+        payload: vec![].try_into().unwrap(),
+        value: 0,
+        reference_block: H256::random(),
+        salt: H256::random().0.to_vec().try_into().unwrap(),
+    };
+    let signed_injected = SignedMessage::create(injected_user_pk, injected_tx).unwrap();
+    let verified_injected = signed_injected.into_verified();
+    let injected_user: ActorId = verified_injected.address().into();
+
+    let canonical_event = vec![BlockRequestEvent::Mirror {
+        actor_id,
+        event: MirrorRequestEvent::MessageQueueingRequested(MessageQueueingRequestedEvent {
+            id: MessageId::from(3),
+            source: canonical_user,
+            payload: vec![],
+            value: 0,
+            call_reply: false,
+        }),
+    }];
+
+    let (promise_sender, mut promise_receiver) = mpsc::unbounded_channel();
+    let promise_sink = BoundPromiseSink::new(promise_sender, H256::zero());
+
+    let executable = ExecutableData {
+        height: block3.header.height,
+        timestamp: block3.header.timestamp,
+        program_states: states,
+        schedule,
+        injected_transactions: vec![verified_injected],
+        events: canonical_event,
+        gas_allowance: Some(DEFAULT_BLOCK_GAS_LIMIT),
+    };
+    let FinalizedBlockTransitions { transitions, .. } = processor
+        .process_programs(executable, Some(promise_sink))
+        .await
+        .unwrap();
+
+    // === Verify three-phase ordering via process_programs output ===
+    //
+    // The single `process_programs` call runs three phases internally:
+    //   Phase 1: handle_injected_and_events — pushes injected tx to injected queue,
+    //            pushes canonical event message to canonical queue
+    //   Phase 2: process_tasks — WakeMessage moves waiting dispatch to canonical queue
+    //   Phase 3: process_queues — executes injected queue first, then canonical queue
+    //
+    // We prove ordering by observing the output:
+    //
+    // ASSERT: Injected+events ran BEFORE queues.
+    //   If queues ran first, no messages would be in queues → 0 replies.
+    //   We get 3 replies ⇒ events populated queues before they were processed.
+    //
+    // ASSERT: Tasks ran BEFORE queues.
+    //   If queues ran before tasks, the WakeMessage wouldn't have moved the waiting dispatch
+    //   back into the canonical queue → only 2 replies (injected + canonical event).
+    //   We get 3 replies ⇒ tasks ran before queue processing.
+    //
+    // ASSERT: Injected+events ran BEFORE tasks (canonical queue is FIFO).
+    //   The event message (phase 1) is queued to canonical queue before the woken dispatch
+    //   (phase 2). So in output, event reply appears before task-woken reply.
+    //   If tasks ran before events, the woken dispatch would be first in canonical queue,
+    //   and we'd see task_user reply before canonical_user reply.
+    //
+    // ASSERT: Injected queue processed BEFORE canonical queue.
+    //   Injected reply is first in output, before any canonical replies.
+
+    // Injected message must produce a promise (proves it was executed)
+    let promise = promise_receiver
+        .recv()
+        .await
+        .expect("promise must be sent for injected transaction")
+        .1;
+    assert_eq!(promise.reply.payload, b"DONE");
+    assert_eq!(
+        promise.reply.code,
+        ReplyCode::Success(SuccessReplyReason::Manual)
+    );
+
+    // Collect all outgoing messages from the single process_programs call
+    let to_users: Vec<_> = transitions
+        .iter()
+        .flat_map(|t| t.messages.iter().map(|m| (&t.actor_id, m)))
+        .collect();
+
+    // --- ASSERT: All three sources produced replies ---
+    // This proves both injected+events AND tasks ran BEFORE queue processing.
+    // If queues ran before injected+events: 0 replies (nothing in queues).
+    // If queues ran before tasks: 2 replies (no woken dispatch in canonical queue).
+    assert_eq!(
+        to_users.len(),
+        3,
+        "All 3 sources (injected, canonical event, task-woken) must produce replies. \
+         Missing replies means queue processing ran before injected+events or tasks."
+    );
+
+    // --- ASSERT: Injected queue processed BEFORE canonical queue ---
+    // The injected reply must come first because process_queues runs
+    // injected queues before canonical queues.
+    assert_eq!(
+        to_users[0].1.destination, injected_user,
+        "Injected reply must come first: injected queue is processed before canonical queue"
+    );
+    assert_eq!(to_users[0].1.payload, b"DONE");
+
+    // --- ASSERT: Events (phase 1) ran BEFORE tasks (phase 2) ---
+    // Canonical queue is FIFO. The event message was queued in phase 1 and the woken
+    // dispatch was queued in phase 2. So the event reply MUST appear before the task reply.
+    // If tasks ran first, task_user reply would appear at position 1, not position 2.
+    assert_eq!(
+        to_users[1].1.destination, canonical_user,
+        "Canonical event reply must come before task-woken reply: \
+         events (phase 1) must populate canonical queue before tasks (phase 2) add woken dispatches"
+    );
+    assert_eq!(to_users[1].1.payload, b"DONE");
+
+    assert_eq!(
+        to_users[2].1.destination, task_user,
+        "Task-woken reply must come last in canonical queue: \
+         tasks (phase 2) enqueue woken dispatch after events (phase 1) already queued their messages"
+    );
+    assert_eq!(to_users[2].1.payload, b"DONE");
+}
+
+#[tokio::test]
+async fn call_wait_up_to_with_huge_duration() {
+    init_logger();
+
+    let get_wat = |duration: u32| {
+        format!(
+            r#"
+            (module
+                (import "env" "memory" (memory 0))
+                (import "env" "gr_wait_up_to" (func $wait_up_to (param i32)))
+                (export "init" (func $init))
+                (func $init
+                    (call $wait_up_to (i32.const {duration}))
+                )
+            )
+            "#
+        )
+    };
+
+    // Huge duration
+    let wat = get_wat(0xFFFFFFFF);
+    let transitions = simple_init_test(wat_to_wasm(&wat).1).await;
+    let block_height = transitions.block_height();
+    let FinalizedBlockTransitions { schedule, .. } = transitions.finalize();
+    let (block, tasks) = schedule.into_iter().next().unwrap();
+    assert_eq!(
+        block,
+        block_height + WAIT_UP_TO_SAFE_DURATION,
+        "Duration should be capped to WAIT_UP_TO_SAFE_DURATION"
+    );
+    let task = tasks.into_iter().next().unwrap();
+    assert!(matches!(task, ScheduledTask::WakeMessage(_, _)));
+
+    // Normal duration
+    let duration = WAIT_UP_TO_SAFE_DURATION + 20;
+    let wat = get_wat(duration);
+    let transitions = simple_init_test(wat_to_wasm(&wat).1).await;
+    let block_height = transitions.block_height();
+    let FinalizedBlockTransitions { schedule, .. } = transitions.finalize();
+    let (block, tasks) = schedule.into_iter().next().unwrap();
+    assert_eq!(
+        block,
+        block_height + duration,
+        "Duration should not be capped if msg has enough gas to cover it"
+    );
+    let task = tasks.into_iter().next().unwrap();
+    assert!(matches!(task, ScheduledTask::WakeMessage(_, _)));
+}

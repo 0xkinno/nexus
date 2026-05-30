@@ -1,0 +1,20 @@
+[package]
+name = "gear-ss58"
+description = "Gear implementation ss58 address format"
+documentation = "https://docs.rs/gear-ss58"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+bs58.workspace = true
+blake2.workspace = true
+hex.workspace = true
+gear-workspace-hack.workspace = true
+
+[features]
+alloc = []

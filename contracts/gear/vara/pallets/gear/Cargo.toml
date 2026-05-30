@@ -1,0 +1,204 @@
+[package]
+name = "pallet-gear"
+description = "Gear main pallet"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+parity-scale-codec = { workspace = true, features = ["derive"] }
+scale-info = { workspace = true, features = ["derive"] }
+log.workspace = true
+primitive-types = { workspace = true, features = ["scale-info"] }
+gear-wasm-instrument.workspace = true
+derive_more.workspace = true
+tracing-subscriber = { workspace = true, optional = true }
+
+# Internal deps
+common.workspace = true
+gear-runtime-interface = { workspace = true }
+gear-lazy-pages-interface.workspace = true
+gear-lazy-pages-common.workspace = true
+core-processor.workspace = true
+gear-core.workspace = true
+gear-core-errors.workspace = true
+gear-core-backend.workspace = true
+pallet-gear-proc-macro = { path = "proc-macro" }
+gsys = { workspace = true, optional = true }
+pallet-gear-voucher.workspace = true
+pallet-gear-bank.workspace = true
+pallet-gear-program.workspace = true
+
+# Substrate deps
+frame-support.workspace = true
+frame-system.workspace = true
+frame-benchmarking = { workspace = true, optional = true }
+sp-core.workspace = true
+sp-std.workspace = true
+sp-io.workspace = true
+sp-runtime.workspace = true
+sp-externalities.workspace = true
+pallet-balances.workspace = true
+pallet-authorship.workspace = true
+pallet-timestamp.workspace = true
+sp-consensus-babe = { workspace = true, optional = true }
+
+# Benchmark deps
+gear-sandbox = { workspace = true, optional = true }
+serde = { workspace = true, optional = true, features = ["derive"] }
+rand = { workspace = true, optional = true }
+rand_pcg = { workspace = true, optional = true }
+test-syscalls = { workspace = true, optional = true }
+demo-read-big-state = { workspace = true, optional = true }
+demo-proxy = { workspace = true, optional = true }
+demo-reserve-gas = { workspace = true, optional = true }
+demo-delayed-sender = { workspace = true, optional = true }
+demo-constructor = { workspace = true, optional = true }
+demo-waiter = { workspace = true, optional = true }
+demo-init-wait = { workspace = true, optional = true }
+demo-signal-entry = { workspace = true, optional = true }
+gear-workspace-hack.workspace = true
+
+# Some of tests require `debug` feature enabled
+[dev-dependencies]
+hex.workspace = true
+wat.workspace = true
+wasmparser.workspace = true
+blake2.workspace = true
+gstd.workspace = true
+demo-async.workspace = true
+demo-async-init.workspace = true
+demo-async-recursion.workspace = true
+demo-async-tester = { workspace = true, features = ["debug"] }
+demo-delayed-sender.workspace = true
+demo-distributor.workspace = true
+demo-init-fail-sender.workspace = true
+demo-init-wait.workspace = true
+demo-init-wait-reply-exit.workspace = true
+demo-fungible-token.workspace = true
+demo-futures-unordered.workspace = true
+demo-program-factory.workspace = true
+demo-program-generator.workspace = true
+demo-proxy.workspace = true
+demo-proxy-relay.workspace = true
+demo-proxy-reservation-with-gas.workspace = true
+demo-read-big-state.workspace = true
+demo-gas-burned.workspace = true
+demo-waiting-proxy.workspace = true
+demo-calc-hash.workspace = true
+demo-calc-hash-over-blocks.workspace = true
+demo-calc-hash-in-one-block.workspace = true
+demo-compose.workspace = true
+demo-constructor = { workspace = true, features = ["debug"] }
+demo-mul-by-const.workspace = true
+demo-wait.workspace = true
+demo-waiter = { workspace = true, features = ["debug"] }
+demo-wait-timeout.workspace = true
+demo-reserve-gas.workspace = true
+demo-rwlock.workspace = true
+demo-reservation-manager.workspace = true
+demo-send-from-reservation.workspace = true
+demo-signal-entry = { workspace = true, features = ["debug"] }
+demo-state-rollback.workspace = true
+demo-async-signal-entry.workspace = true
+demo-async-custom-entry.workspace = true
+demo-out-of-memory.workspace = true
+demo-ping = { workspace = true, features = ["debug"] }
+demo-sync-duplicate.workspace = true
+demo-custom.workspace = true
+demo-delayed-reservation-sender = { workspace = true, features = ["debug"] }
+demo-async-critical = { workspace = true, features = ["debug"] }
+demo-async-reply-hook = { workspace = true, features = ["debug"] }
+demo-create-program-reentrance = { workspace = true, features = ["debug"] }
+demo-value-sender.workspace = true
+demo-vec.workspace = true
+test-syscalls = { workspace = true, features = ["debug"] }
+frame-support-test = { workspace = true, features = ["std"] }
+common = { workspace = true, features = ["std"] }
+pallet-gear-gas = { workspace = true, features = ["std"] }
+pallet-gear-messenger = { workspace = true, features = ["std"] }
+pallet-gear-scheduler = { workspace = true, features = ["std"] }
+pallet-gear-program = { workspace = true, features = ["std"] }
+pallet-gear-voucher = { workspace = true, features = ["std"] }
+rand.workspace = true
+
+[features]
+default = ['std']
+std = [
+    "parity-scale-codec/std",
+    "tracing-subscriber",
+    "log/std",
+    "common/std",
+    "frame-benchmarking?/std",
+    "frame-support/std",
+    "frame-support-test/std",
+    "frame-system/std",
+    "gear-wasm-instrument/std",
+    "core-processor/std",
+    "gear-core-backend/std",
+    "gear-lazy-pages-interface/std",
+    "scale-info/std",
+    "sp-io/std",
+    "sp-std/std",
+    "sp-core/std",
+    "sp-runtime/std",
+    "sp-externalities/std",
+    "pallet-balances/std",
+    "pallet-authorship/std",
+    "pallet-gear-gas/std",
+    "pallet-gear-messenger/std",
+    "pallet-gear-scheduler/std",
+    "pallet-gear-program/std",
+    "pallet-gear-voucher/std",
+    "pallet-gear-bank/std",
+    "pallet-gear-proc-macro/full",
+    "primitive-types/std",
+    "serde/std",
+    "sp-consensus-babe/std",
+    "test-syscalls?/std",
+    "demo-read-big-state?/std",
+    "demo-proxy?/std",
+    "demo-reserve-gas?/std",
+    "demo-delayed-sender?/std",
+    "demo-constructor?/std",
+    "demo-waiter?/std",
+    "demo-init-wait?/std",
+    "demo-signal-entry?/std",
+    "gear-runtime-interface/std",
+]
+runtime-benchmarks = [
+    "frame-benchmarking/runtime-benchmarks",
+    "frame-system/runtime-benchmarks",
+    "frame-support/runtime-benchmarks",
+    "common/runtime-benchmarks",
+    "gear-core-backend/mock",
+    "gear-core-errors/codec",
+    "gear-sandbox",
+    "sp-consensus-babe",
+    "rand",
+    "rand_pcg",
+    "test-syscalls/wasm-wrapper",
+    "demo-read-big-state/wasm-wrapper",
+    "demo-proxy/wasm-wrapper",
+    "gsys",
+    "demo-reserve-gas/wasm-wrapper",
+    "demo-delayed-sender/wasm-wrapper",
+    "demo-constructor/wasm-wrapper",
+    "demo-waiter/wasm-wrapper",
+    "demo-init-wait/wasm-wrapper",
+    "demo-signal-entry/wasm-wrapper",
+    "core-processor/mock",
+]
+runtime-benchmarks-checkers = []
+try-runtime = ["frame-support/try-runtime"]
+dev = []
