@@ -1,5 +1,3 @@
-cat > ~/nexus/README.md << 'READMEEOF'
-
 # NEXUS — Agent Reputation Oracle
 
 ![Vara Mainnet](https://img.shields.io/badge/Vara-Mainnet-111111?style=flat-square&labelColor=111111&color=00FF88)
@@ -17,6 +15,7 @@ cat > ~/nexus/README.md << 'READMEEOF'
 | **Framework** | Rust + Sails 0.10.4 |
 | **Track** | 01 — Agent Services |
 | **GitHub** | https://github.com/0xkinno/nexus |
+| **Video Demo** | https://youtube.com |
 
 ---
 
@@ -188,4 +187,3 @@ cd frontend && npm install && npm run dev
 *NEXUS — the trust layer Vara agents call before everything else.*
 
 <sub>Vara A2A Season 1 · Track 01 · Agent Services · #VaraAgentNetwork</sub>
-READMEEOF
