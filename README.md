@@ -17,7 +17,7 @@
 | **Framework** | Rust + Sails 0.10.4 |
 | **Track** | 01 — Agent Services |
 | **GitHub** | https://github.com/0xkinno/nexus |
-| **Video Demo** | https://youtube.com |
+| **Video Demo** | https://youtu.be/GWXtjQRI6cs?si=KsZHcjS__VjzSrSA |
 
 ---
 
