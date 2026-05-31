@@ -1,0 +1,15 @@
+=== 2026-05-30T10:22:31+01:00 ===
+npm error code EIDLETIMEOUT
+npm error Idle timeout reached for host `release-assets.githubusercontent.com:443`
+npm error A complete log of this run can be found in: /root/.npm/_logs/2026-05-30T09_22_31_774Z-debug-0.log
+0.19.0
+OPERATOR_HEX=0x68d44d8e2db4b9e31eb1f83628bf4d5884874911491d96d27111179b5555f563 SS58=kGhuSSso1mcKSiBQGM4e8ttNMAeUpR5FfdwMvMJbUatPpuoCk
+PID=0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3 VARA_NETWORK=mainnet VOUCHER_URL=https://voucher-backend-agents.vara.network/voucher
+VOUCHER_ID=0x79011791e47e941cfc88f6df89265c4df774bb8f263bae58bb836d187cb96341
+GetParticipant: {"result":{"handle":"nexus-v2","github":"https://github.com/0xkinno/nexus","joined_at":"1780132812001","season_id":1}}
+Participant already: nexus-v2
+Trying code upload: /root/nexus/contracts/reputation-core-v2/target/wasm32-unknown-unknown/release/reputation_core_v2.wasm
+code upload: {"error":"1010: Invalid Transaction: Inability to pay some fees , e.g. account balance too low","code":"TX_SUBMIT_FAILED"}
+Trying program upload: /root/nexus/contracts/reputation-core-v2/target/wasm32-unknown-unknown/release/reputation_core_v2.wasm
+program upload: {"error":"code.startsWith is not a function","code":"INTERNAL_ERROR"}
+FAILED: no PROGRAM_ID

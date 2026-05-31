@@ -1,0 +1,11 @@
+/root/nexus/contracts/nexus-sails/target/wasm-projects/release/release/deps/cargo_metadata-6566f54183bb987a.d: /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/lib.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/dependency.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/diagnostic.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/errors.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/messages.rs
+
+/root/nexus/contracts/nexus-sails/target/wasm-projects/release/release/deps/libcargo_metadata-6566f54183bb987a.rlib: /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/lib.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/dependency.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/diagnostic.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/errors.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/messages.rs
+
+/root/nexus/contracts/nexus-sails/target/wasm-projects/release/release/deps/libcargo_metadata-6566f54183bb987a.rmeta: /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/lib.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/dependency.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/diagnostic.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/errors.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/messages.rs
+
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/lib.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/dependency.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/diagnostic.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/errors.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_metadata-0.20.0/src/messages.rs:

@@ -1,0 +1,12 @@
+/root/nexus/contracts/nexus-sails/target/release/deps/gear_dlmalloc-da19221032ebc2ba.d: /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/lib.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/common.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/dlmalloc.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/dlverbose.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/global.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/linux.rs
+
+/root/nexus/contracts/nexus-sails/target/release/deps/libgear_dlmalloc-da19221032ebc2ba.rlib: /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/lib.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/common.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/dlmalloc.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/dlverbose.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/global.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/linux.rs
+
+/root/nexus/contracts/nexus-sails/target/release/deps/libgear_dlmalloc-da19221032ebc2ba.rmeta: /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/lib.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/common.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/dlmalloc.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/dlverbose.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/global.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/linux.rs
+
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/lib.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/common.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/dlmalloc.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/dlverbose.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/global.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gear-dlmalloc-0.2.0/src/linux.rs:

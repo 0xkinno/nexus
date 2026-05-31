@@ -1,0 +1,13 @@
+[1m[33mwarning[0m: output filename collision.
+The lib target `nexus` in package `nexus-wasm v0.1.0 (/root/nexus/contracts/nexus-sails/target/release/build/nexus-76fd9e9ffd55e971/out)` has the same output filename as the lib target `nexus` in package `nexus v0.1.0 (/root/nexus/contracts/nexus-sails)`.
+Colliding filename is: /root/nexus/contracts/nexus-sails/target/wasm-projects/release/wasm32v1-none/release/deps/nexus.wasm
+The targets should have unique names.
+Consider changing their names to be unique or compiling them separately.
+This may become a hard error in the future; see <https://github.com/rust-lang/cargo/issues/6313>.
+[1m[33mwarning[0m: output filename collision.
+The lib target `nexus` in package `nexus-wasm v0.1.0 (/root/nexus/contracts/nexus-sails/target/release/build/nexus-76fd9e9ffd55e971/out)` has the same output filename as the lib target `nexus` in package `nexus v0.1.0 (/root/nexus/contracts/nexus-sails)`.
+Colliding filename is: /root/nexus/contracts/nexus-sails/target/wasm-projects/release/wasm32v1-none/release/deps/nexus.wasm.dwp
+The targets should have unique names.
+Consider changing their names to be unique or compiling them separately.
+This may become a hard error in the future; see <https://github.com/rust-lang/cargo/issues/6313>.
+[1m[92m    Finished[0m `release` profile [optimized] target(s) in 0.12s

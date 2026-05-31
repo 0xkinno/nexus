@@ -4,12 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-gstd = { version = "1.9.2", default-features = false }
-parity-scale-codec = { version = "3", default-features = false, features = ["derive"] }
-scale-info = { version = "2", default-features = false, features = ["derive"] }
+gstd = { git = "https://github.com/gear-tech/gear", tag = "v1.6.1" }
+
+[build-dependencies]
+gear-wasm-builder = { git = "https://github.com/gear-tech/gear", tag = "v1.6.1" }
 
 [profile.release]
 panic = "abort"

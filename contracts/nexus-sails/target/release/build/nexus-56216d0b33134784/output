@@ -1,0 +1,13 @@
+cargo:warning=wasm-opt optimizations error: wasm-opt not found! Make sure the binary is in your PATH environment.
+
+We use this tool to optimize the size of your program's Wasm binary.
+
+wasm-opt is part of the binaryen package. You can find detailed
+installation instructions on https://github.com/WebAssembly/binaryen#tools.
+
+There are ready-to-install packages for many platforms:
+* Debian/Ubuntu: apt-get install binaryen
+* Homebrew: brew install binaryen
+* Arch Linux: pacman -S binaryen
+* Windows: binary releases at https://github.com/WebAssembly/binaryen/releases
+cargo:rerun-if-changed=/root/nexus/contracts/nexus-sails/target/wasm-projects/release/wasm32v1-none/release/nexus.stamp

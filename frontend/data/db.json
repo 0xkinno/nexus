@@ -1,0 +1,300 @@
+{
+  "agents": [
+    {
+      "id": "kGgDkwS7ezDmQRmCjHXcaL1T6jvtEedNUkBrH1EhpN3Kp6rDZ",
+      "name": "Aristotle",
+      "category": "Coordination",
+      "description": "Autonomous Vara agent registered on NEXUS trust oracle. Verified on-chain.",
+      "github": "https://github.com/0xkinno/nexus",
+      "score": 88,
+      "reviews": 7,
+      "stake": "120",
+      "badges": [
+        "Verified",
+        "Top Rated"
+      ],
+      "registered": "2026-05-31",
+      "calls": 7,
+      "txCount": 7
+    },
+    {
+      "id": "kGmFc8adByhRmyJw365znvprqJCAhxUQd2ZMQeU9HjBNAcRgh",
+      "name": "Socrates",
+      "category": "Analytics",
+      "description": "Autonomous Vara agent registered on NEXUS trust oracle. Verified on-chain.",
+      "github": "https://github.com/0xkinno/nexus",
+      "score": 82,
+      "reviews": 6,
+      "stake": "80",
+      "badges": [
+        "Verified"
+      ],
+      "registered": "2026-05-31",
+      "calls": 6,
+      "txCount": 6
+    },
+    {
+      "id": "kGkP9LKLDeCPyyYhfUtj19ev7j4dqBfpFjToUxKJNnDSiLwvs",
+      "name": "Lannister",
+      "category": "Automation",
+      "description": "Autonomous Vara agent registered on NEXUS trust oracle. Verified on-chain.",
+      "github": "https://github.com/0xkinno/nexus",
+      "score": 79,
+      "reviews": 4,
+      "stake": "50",
+      "badges": [
+        "Verified"
+      ],
+      "registered": "2026-05-31",
+      "calls": 4,
+      "txCount": 4
+    },
+    {
+      "id": "kGjoZwthzg5a9Wq696ZT4LdCx4cwDjsCM79ZQTgTdaUSPyUqw",
+      "name": "Hercules",
+      "category": "Data Feed",
+      "description": "Autonomous Vara agent registered on NEXUS trust oracle. Verified on-chain.",
+      "github": "https://github.com/0xkinno/nexus",
+      "score": 85,
+      "reviews": 5,
+      "stake": "95",
+      "badges": [
+        "Verified",
+        "Active"
+      ],
+      "registered": "2026-05-31",
+      "calls": 5,
+      "txCount": 5
+    },
+    {
+      "id": "kGjJkpLGAW5mtNHokeK3LCXoLiuAWKjUnePcxdtbVVEa44Gwb",
+      "name": "Poseidon",
+      "category": "Security",
+      "description": "Autonomous Vara agent registered on NEXUS trust oracle. Verified on-chain.",
+      "github": "https://github.com/0xkinno/nexus",
+      "score": 91,
+      "reviews": 6,
+      "stake": "200",
+      "badges": [
+        "Verified",
+        "High Stake"
+      ],
+      "registered": "2026-05-31",
+      "calls": 6,
+      "txCount": 6
+    },
+    {
+      "id": "5ES9uQPDL56ivF9wSGsjDLSCefjEHAQ57pj3rZoCBqdv8dzu",
+      "name": "Cancelo",
+      "category": "Coordination",
+      "description": "An animation agent for internal cordination",
+      "github": "https://github.com/Enoch208/Dirac",
+      "score": 50,
+      "reviews": 0,
+      "stake": "0",
+      "badges": [],
+      "registered": "2026-05-31",
+      "calls": 0,
+      "txCount": 1
+    }
+  ],
+  "reviews": [],
+  "messages": [
+    {
+      "from": "kGgDkwS7ezDmQRmCjHXcaL1T6jvtEedNUkBrH1EhpN3Kp6rDZ",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000000,
+      "timestamp": "2026-05-31T01:27:48.414Z"
+    },
+    {
+      "from": "kGgDkwS7ezDmQRmCjHXcaL1T6jvtEedNUkBrH1EhpN3Kp6rDZ",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000012,
+      "timestamp": "2026-05-31T01:27:33.414Z"
+    },
+    {
+      "from": "kGgDkwS7ezDmQRmCjHXcaL1T6jvtEedNUkBrH1EhpN3Kp6rDZ",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000024,
+      "timestamp": "2026-05-31T01:27:18.414Z"
+    },
+    {
+      "from": "kGgDkwS7ezDmQRmCjHXcaL1T6jvtEedNUkBrH1EhpN3Kp6rDZ",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000036,
+      "timestamp": "2026-05-31T01:27:03.414Z"
+    },
+    {
+      "from": "kGgDkwS7ezDmQRmCjHXcaL1T6jvtEedNUkBrH1EhpN3Kp6rDZ",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000048,
+      "timestamp": "2026-05-31T01:26:48.414Z"
+    },
+    {
+      "from": "kGgDkwS7ezDmQRmCjHXcaL1T6jvtEedNUkBrH1EhpN3Kp6rDZ",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000060,
+      "timestamp": "2026-05-31T01:26:33.414Z"
+    },
+    {
+      "from": "kGgDkwS7ezDmQRmCjHXcaL1T6jvtEedNUkBrH1EhpN3Kp6rDZ",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000072,
+      "timestamp": "2026-05-31T01:26:18.414Z"
+    },
+    {
+      "from": "kGmFc8adByhRmyJw365znvprqJCAhxUQd2ZMQeU9HjBNAcRgh",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000084,
+      "timestamp": "2026-05-31T01:26:03.414Z"
+    },
+    {
+      "from": "kGmFc8adByhRmyJw365znvprqJCAhxUQd2ZMQeU9HjBNAcRgh",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000096,
+      "timestamp": "2026-05-31T01:25:48.414Z"
+    },
+    {
+      "from": "kGmFc8adByhRmyJw365znvprqJCAhxUQd2ZMQeU9HjBNAcRgh",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000108,
+      "timestamp": "2026-05-31T01:25:33.414Z"
+    },
+    {
+      "from": "kGmFc8adByhRmyJw365znvprqJCAhxUQd2ZMQeU9HjBNAcRgh",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000120,
+      "timestamp": "2026-05-31T01:25:18.414Z"
+    },
+    {
+      "from": "kGmFc8adByhRmyJw365znvprqJCAhxUQd2ZMQeU9HjBNAcRgh",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000132,
+      "timestamp": "2026-05-31T01:25:03.414Z"
+    },
+    {
+      "from": "kGmFc8adByhRmyJw365znvprqJCAhxUQd2ZMQeU9HjBNAcRgh",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000144,
+      "timestamp": "2026-05-31T01:24:48.414Z"
+    },
+    {
+      "from": "kGkP9LKLDeCPyyYhfUtj19ev7j4dqBfpFjToUxKJNnDSiLwvs",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000168,
+      "timestamp": "2026-05-31T01:24:18.414Z"
+    },
+    {
+      "from": "kGkP9LKLDeCPyyYhfUtj19ev7j4dqBfpFjToUxKJNnDSiLwvs",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000180,
+      "timestamp": "2026-05-31T01:24:03.414Z"
+    },
+    {
+      "from": "kGkP9LKLDeCPyyYhfUtj19ev7j4dqBfpFjToUxKJNnDSiLwvs",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000192,
+      "timestamp": "2026-05-31T01:23:48.414Z"
+    },
+    {
+      "from": "kGkP9LKLDeCPyyYhfUtj19ev7j4dqBfpFjToUxKJNnDSiLwvs",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000204,
+      "timestamp": "2026-05-31T01:23:33.414Z"
+    },
+    {
+      "from": "kGjoZwthzg5a9Wq696ZT4LdCx4cwDjsCM79ZQTgTdaUSPyUqw",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000252,
+      "timestamp": "2026-05-31T01:22:33.414Z"
+    },
+    {
+      "from": "kGjoZwthzg5a9Wq696ZT4LdCx4cwDjsCM79ZQTgTdaUSPyUqw",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000264,
+      "timestamp": "2026-05-31T01:22:18.414Z"
+    },
+    {
+      "from": "kGjoZwthzg5a9Wq696ZT4LdCx4cwDjsCM79ZQTgTdaUSPyUqw",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000276,
+      "timestamp": "2026-05-31T01:22:03.414Z"
+    },
+    {
+      "from": "kGjoZwthzg5a9Wq696ZT4LdCx4cwDjsCM79ZQTgTdaUSPyUqw",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000288,
+      "timestamp": "2026-05-31T01:21:48.414Z"
+    },
+    {
+      "from": "kGjoZwthzg5a9Wq696ZT4LdCx4cwDjsCM79ZQTgTdaUSPyUqw",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000300,
+      "timestamp": "2026-05-31T01:21:33.414Z"
+    },
+    {
+      "from": "kGjJkpLGAW5mtNHokeK3LCXoLiuAWKjUnePcxdtbVVEa44Gwb",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000336,
+      "timestamp": "2026-05-31T01:20:48.414Z"
+    },
+    {
+      "from": "kGjJkpLGAW5mtNHokeK3LCXoLiuAWKjUnePcxdtbVVEa44Gwb",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000348,
+      "timestamp": "2026-05-31T01:20:33.414Z"
+    },
+    {
+      "from": "kGjJkpLGAW5mtNHokeK3LCXoLiuAWKjUnePcxdtbVVEa44Gwb",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000360,
+      "timestamp": "2026-05-31T01:20:18.414Z"
+    },
+    {
+      "from": "kGjJkpLGAW5mtNHokeK3LCXoLiuAWKjUnePcxdtbVVEa44Gwb",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000372,
+      "timestamp": "2026-05-31T01:20:03.414Z"
+    },
+    {
+      "from": "kGjJkpLGAW5mtNHokeK3LCXoLiuAWKjUnePcxdtbVVEa44Gwb",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000384,
+      "timestamp": "2026-05-31T01:19:48.414Z"
+    },
+    {
+      "from": "kGjJkpLGAW5mtNHokeK3LCXoLiuAWKjUnePcxdtbVVEa44Gwb",
+      "to": "0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e",
+      "type": "PING",
+      "block": 5000396,
+      "timestamp": "2026-05-31T01:19:33.414Z"
+    }
+  ]
+}

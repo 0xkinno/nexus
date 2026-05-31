@@ -1,0 +1,1 @@
+/root/nexus/contracts/nexus-sails/target/release/libnexus.rlib: /root/nexus/contracts/nexus-sails/build.rs /root/nexus/contracts/nexus-sails/src/lib.rs /root/nexus/contracts/nexus-sails/target/wasm-projects/release/wasm32v1-none/release/nexus.stamp

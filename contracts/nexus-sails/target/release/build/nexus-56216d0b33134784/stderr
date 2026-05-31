@@ -1,0 +1,56 @@
+[1m[33mwarning[0m: output filename collision.
+The lib target `nexus` in package `nexus-wasm v0.1.0 (/root/nexus/contracts/nexus-sails/target/release/build/nexus-56216d0b33134784/out)` has the same output filename as the lib target `nexus` in package `nexus v0.1.0 (/root/nexus/contracts/nexus-sails)`.
+Colliding filename is: /root/nexus/contracts/nexus-sails/target/wasm-projects/release/wasm32v1-none/release/deps/nexus.wasm
+The targets should have unique names.
+Consider changing their names to be unique or compiling them separately.
+This may become a hard error in the future; see <https://github.com/rust-lang/cargo/issues/6313>.
+[1m[33mwarning[0m: output filename collision.
+The lib target `nexus` in package `nexus-wasm v0.1.0 (/root/nexus/contracts/nexus-sails/target/release/build/nexus-56216d0b33134784/out)` has the same output filename as the lib target `nexus` in package `nexus v0.1.0 (/root/nexus/contracts/nexus-sails)`.
+Colliding filename is: /root/nexus/contracts/nexus-sails/target/wasm-projects/release/wasm32v1-none/release/deps/nexus.wasm.dwp
+The targets should have unique names.
+Consider changing their names to be unique or compiling them separately.
+This may become a hard error in the future; see <https://github.com/rust-lang/cargo/issues/6313>.
+[1m[92m   Compiling[0m parity-scale-codec v3.7.5
+[1m[92m   Compiling[0m byte-slice-cast v1.2.3
+[1m[92m   Compiling[0m crunchy v0.2.4
+[1m[92m   Compiling[0m hex v0.4.3
+[1m[92m   Compiling[0m byteorder v1.5.0
+[1m[92m   Compiling[0m rustc-hex v2.1.0
+[1m[92m   Compiling[0m serde v1.0.228
+[1m[92m   Compiling[0m wasmparser v0.230.0
+[1m[92m   Compiling[0m wasm-encoder v0.230.0
+[1m[92m   Compiling[0m fixed-hash v0.8.0
+[1m[92m   Compiling[0m uint v0.10.0
+[1m[92m   Compiling[0m uint v0.9.5
+[1m[92m   Compiling[0m gear-ss58 v1.10.0
+[1m[92m   Compiling[0m primitive-types v0.13.1
+[1m[92m   Compiling[0m serde_spanned v0.6.9
+[1m[92m   Compiling[0m toml_datetime v0.6.11
+[1m[92m   Compiling[0m serde-value v0.7.0
+[1m[92m   Compiling[0m cargo-platform v0.2.0
+[1m[92m   Compiling[0m scale-bits v0.7.0
+[1m[92m   Compiling[0m scale-info v2.11.6
+[1m[92m   Compiling[0m impl-codec v0.6.0
+[1m[92m   Compiling[0m sails-macros-core v0.10.4
+[1m[92m   Compiling[0m toml_edit v0.22.27
+[1m[92m   Compiling[0m scale-encode v0.10.1
+[1m[92m   Compiling[0m scale-decode v0.16.2
+[1m[92m   Compiling[0m primitive-types v0.12.2
+[1m[92m   Compiling[0m numerated v1.10.0
+[1m[92m   Compiling[0m sails-macros v0.10.4
+[1m[92m   Compiling[0m gprimitives v1.10.0
+[1m[92m   Compiling[0m gear-core-errors v1.10.0
+[1m[92m   Compiling[0m toml v0.8.23
+[1m[92m   Compiling[0m gstd-codegen v1.10.0
+[1m[92m   Compiling[0m cargo-util-schemas v0.2.0
+[1m[92m   Compiling[0m cargo_toml v0.21.0
+[1m[92m   Compiling[0m gstd v1.10.0
+[1m[92m   Compiling[0m sails-rs v0.10.4
+[1m[92m   Compiling[0m cargo_metadata v0.20.0
+[1m[92m   Compiling[0m gear-wasm-instrument v1.10.0
+[1m[92m   Compiling[0m gear-wasm-optimizer v1.10.0
+[1m[92m   Compiling[0m gear-core v1.10.0
+[1m[92m   Compiling[0m gear-wasm-builder v1.10.0
+[1m[92m   Compiling[0m nexus v0.1.0 (/root/nexus/contracts/nexus-sails)
+[1m[92m   Compiling[0m nexus-wasm v0.1.0 (/root/nexus/contracts/nexus-sails/target/release/build/nexus-56216d0b33134784/out)
+[1m[92m    Finished[0m `release` profile [optimized] target(s) in 17.82s

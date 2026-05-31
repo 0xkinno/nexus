@@ -1,0 +1,1 @@
+{"rustc":4534802523802120277,"features":"[]","declared_features":"[\"serde\", \"ufmt-write\"]","target":17943066799339487532,"profile":2695877842036286050,"path":115953121880567638,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"release/.fingerprint/str-buf-58f23cb3e70f4038/dep-lib-str_buf","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}

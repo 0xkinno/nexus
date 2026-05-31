@@ -1,0 +1,1 @@
+/root/nexus/contracts/nexus-sails/target/wasm-projects/release/wasm32v1-none/release/nexus.wasm: /root/nexus/contracts/nexus-sails/build.rs /root/nexus/contracts/nexus-sails/src/lib.rs /root/nexus/contracts/nexus-sails/target/release/build/nexus-56216d0b33134784/out/src/lib.rs

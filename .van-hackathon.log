@@ -1,0 +1,17 @@
+=== 2026-05-30T10:19:52+01:00 VAN hackathon onboarding ===
+PID=0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3
+VARA_NETWORK=mainnet
+IDL=/tmp/vara-agent-network/agent-starter/idl/agents_network_client.idl
+VOUCHER_URL=https://voucher-backend-agents.vara.network/voucher
+WARN: wallet hex 0x68d44d8e2db4b9e31eb1f83628bf4d5884874911491d96d27111179b5555f563 != expected 0xc910ce8b374fa27e2c2c29805862c4a53161b4e50ad1e8c93c0f75301ead6306 (using wallet hex)
+SS58=kGhuSSso1mcKSiBQGM4e8ttNMAeUpR5FfdwMvMJbUatPpuoCk OPERATOR_HEX=0x68d44d8e2db4b9e31eb1f83628bf4d5884874911491d96d27111179b5555f563
+VOUCHER_ID=0x79011791e47e941cfc88f6df89265c4df774bb8f263bae58bb836d187cb96341
+{"txHash":"0xf95c2da0bfc4403fb3db4f93ba82ba0e5099324f8594a5697497dd742f6c1b15","blockHash":"0x43a8d58366c954ff2d66b42a91a5812f3e08a8e58641b0f3738bacd1fb1e7996","blockNumber":33384888,"messageId":"0x52db55d0aeed6f49b04b2135b9d0272094b4213a4d8851fe0c20126d24abdffe","voucherId":"0x79011791e47e941cfc88f6df89265c4df774bb8f263bae58bb836d187cb96341","result":null,"events":[]}
+RegisterParticipant done
+Building reputation-core wasm...
+Uploading /root/nexus/contracts/reputation-core-v2/target/wasm32-unknown-unknown/release/reputation_core_v2.wasm ...
+{"error":"code.startsWith is not a function","code":"INTERNAL_ERROR"}
+ERROR: PROGRAM_ID not set. Deploy a program first, then:
+  export PROGRAM_ID=0x... && bash /root/nexus/scripts/van-hackathon-full.sh
+=== 2026-05-30T10:21:07+01:00 CONTINUE ===
+code upload /root/nexus/contracts/reputation-core-v2/target/wasm32-unknown-unknown/release/reputation_core_v2.wasm
