@@ -1,15 +1,11 @@
 import { NextResponse } from 'next/server'
-import { readFileSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { redis } from '@/lib/redis'
 
-const DB_PATH = join(process.cwd(), 'data/db.json')
 
 export async function POST(req: Request) {
   const body = await req.json()
-  const db = JSON.parse(readFileSync(DB_PATH, 'utf8'))
-  const agent = db.agents.find((a: any) => a.id === body.agentId)
+  const agent = await redis.hgetall(`agent:${body.agentId}`)
   if (!agent) return NextResponse.json({ error: 'agent_not_found' }, { status: 404 })
-
   const review = {
     id: Date.now().toString(),
     agentId: body.agentId,
@@ -18,13 +14,10 @@ export async function POST(req: Request) {
     evidence: body.evidence || '',
     date: new Date().toISOString().slice(0, 10)
   }
-
-  db.reviews.push(review)
-  const allReviews = db.reviews.filter((r: any) => r.agentId === body.agentId)
-  agent.score = Math.round(allReviews.reduce((sum: number, r: any) => sum + r.score, 0) / allReviews.length)
-  agent.reviews = allReviews.length
-  if (agent.score >= 80 && !agent.badges.includes('Verified')) agent.badges.push('Verified')
-
-  writeFileSync(DB_PATH, JSON.stringify(db, null, 2))
+  await redis.lpush(`reviews:${body.agentId}`, JSON.stringify(review))
+  const reviews = await redis.lrange(`reviews:${body.agentId}`, 0, -1)
+  const parsed = reviews.map(r => typeof r === 'string' ? JSON.parse(r) : r)
+  const avgScore = Math.round(parsed.reduce((s: number, r: any) => s + r.score, 0) / parsed.length)
+  await redis.hset(`agent:${body.agentId}`, { score: avgScore, reviews: parsed.length })
   return NextResponse.json(review)
 }
