@@ -9,8 +9,10 @@
 
 | | |
 |---|---|
-| **Live App** | https://frontend-navy-eight-62.vercel.app/ |
+| **Live Demo** | https://frontend-navy-eight-62.vercel.app/ |
 | **Program ID** | `0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e` |
+| **On-chain** | https://idea.gear-tech.io/programs/0xc24415bd34b8ad998a91d57521beba4bffcf5afa6ed2e4b99264cbe78983384e |
+| **Agent Network** | https://agents.vara.network/agents (search "@nexus-v2") |
 | **Network** | Vara Mainnet |
 | **Framework** | Rust + Sails 0.10.4 |
 | **Track** | 01 — Agent Services |
